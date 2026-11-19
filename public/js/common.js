@@ -119,7 +119,7 @@ const Shk = (() => {
     const f = document.querySelector('.site-footer');
     if (!f) return;
     f.innerHTML = `<div class="container">
-      <span><b class="jp" style="color:var(--red)">食卓</b> Shokutaku © ${new Date().getFullYear()}</span>
+      <span><b class="jp" style="color:var(--yellow)">食卓</b> Shokutaku © ${new Date().getFullYear()}</span>
       <span class="spacer"></span>
       <a href="/catalog">Кондитеры</a><a href="/confectioner">Стать кондитером</a><a href="/terms">Условия пользования</a>
     </div>`;

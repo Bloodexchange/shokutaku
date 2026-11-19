@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shokutaku 食卓 — кондитеры на заказ</title>
 <meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
-<meta name="theme-color" content="#262857">
+<meta name="theme-color" content="#170d2e">
 <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/img/favicon-64.png" sizes="64x64">
 <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
@@ -14,8 +14,9 @@
 <meta property="og:image" content="/img/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
+<script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
 </head>
 <body>
@@ -24,14 +25,19 @@
   <section class="hero">
     <div class="container">
       <div>
-        <h1>Сладости на заказ от проверенных кондитеров <span class="jp">食卓</span></h1>
+        <span class="eyebrow">🍰 Проверенные кондитеры Узбекистана</span>
+        <h1>Сладости на заказ <span class="grad-text">с душой</span> <span class="jp">食卓</span></h1>
         <p class="lead">Shokutaku связывает заказчиков с кондитерами: торты, десерты, выпечка и угощения к любому столу. Каждого кондитера мы проверяем вручную, а ИИ поможет выбрать лучшего под ваше блюдо.</p>
-        <div class="row" style="margin-top:22px">
-          <a class="btn btn-gold" href="/catalog">Найти кондитера</a>
-          <a class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.35)" href="/terms">Как это работает</a>
+        <div class="row" style="margin-top:24px">
+          <a class="btn btn-gold" href="/catalog">Найти кондитера →</a>
+          <a class="btn" href="/terms">Как это работает</a>
         </div>
       </div>
-      <img class="hero-logo" src="/img/logo.svg" alt="Логотип Shokutaku 食卓: лиса в круглой эмблеме">
+      <div class="hero-stage" aria-hidden="true">
+        <div class="halo"></div>
+        <div data-cake="1.15"></div>
+        <img class="hero-badge" src="/img/logo.svg" alt="">
+      </div>
     </div>
   </section>
 
@@ -52,10 +58,17 @@
     </div>
   </div>
 
+  <div class="marquee" aria-hidden="true">
+    <div class="track">
+      <span class="chip">🎂 Торты</span><span class="chip">🧁 Капкейки</span><span class="chip">🍪 Печенье</span><span class="chip">🍰 Чизкейки</span><span class="chip">🍫 Шоколад</span><span class="chip">🥐 Выпечка</span><span class="chip">🍡 Моти</span><span class="chip">🍮 Десерты</span><span class="chip">🍦 Мороженое</span><span class="chip">💒 Свадебные торты</span><span class="chip">🦐 Морепродукты</span><span class="chip">🌿 Без сахара</span>
+      <span class="chip">🎂 Торты</span><span class="chip">🧁 Капкейки</span><span class="chip">🍪 Печенье</span><span class="chip">🍰 Чизкейки</span><span class="chip">🍫 Шоколад</span><span class="chip">🥐 Выпечка</span><span class="chip">🍡 Моти</span><span class="chip">🍮 Десерты</span><span class="chip">🍦 Мороженое</span><span class="chip">💒 Свадебные торты</span><span class="chip">🦐 Морепродукты</span><span class="chip">🌿 Без сахара</span>
+    </div>
+  </div>
+
   <section class="section">
     <div class="container">
-      <h2 class="center">Как это работает</h2>
-      <div class="steps" style="margin-top:24px">
+      <h2 class="center">Как это <span class="grad-text">работает</span></h2>
+      <div class="steps" style="margin-top:26px">
         <div class="card"><div class="step-num">1</div><h3>Опишите заказ</h3><p class="muted">Напишите, что хотите: «медовик на 2 кг без орехов». ИИ Gemini подберёт подходящих кондитеров.</p></div>
         <div class="card"><div class="step-num">2</div><h3>Выберите кондитера</h3><p class="muted">Смотрите стаж, любимые блюда, сертификаты и отзывы других заказчиков.</p></div>
         <div class="card"><div class="step-num">3</div><h3>Отправьте заявку</h3><p class="muted">Укажите дату, бюджет и пожелания. Когда кондитер примет заявку, вы увидите контакты друг друга.</p></div>
