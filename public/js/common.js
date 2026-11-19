@@ -91,7 +91,7 @@ const Shk = (() => {
     if (!header) return;
     header.innerHTML = `
       <div class="container">
-        <a class="brand" href="/"><img src="/img/logo.svg" alt="" width="40" height="40"><b>Shokutaku</b><span class="jp">食卓</span></a>
+        <a class="brand" href="/" aria-label="Shokutaku 食卓 — на главную"><img src="/img/logo-horizontal.svg" alt="Shokutaku 食卓" height="44"></a>
         <button class="menu-toggle" aria-label="Меню">☰</button>
         <nav class="nav">
           <a href="/catalog">Кондитеры</a>
