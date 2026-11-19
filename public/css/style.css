@@ -215,7 +215,7 @@ input[type=file]::file-selector-button { font: inherit; font-weight: 700; border
 .cat-grid label:hover { transform: translateY(-2px); }
 .cat-grid input { accent-color: var(--pink); width: 18px; height: 18px; flex: none; }
 .cat-grid label:has(input:checked) { border-color: var(--pink); background: rgba(255, 95, 162, .18); }
-.alert { padding: 12px 15px; border-radius: 14px; background: rgba(255, 90, 110, .18); border: 1px solid rgba(255, 90, 110, .35); color: #ffd1d7; font-weight: 700; font-size: 14px; animation: rise .4s var(--fluid) backwards; }
+.alert { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 12px 15px; border-radius: 14px; background: rgba(255, 90, 110, .18); border: 1px solid rgba(255, 90, 110, .35); color: #ffd1d7; font-weight: 700; font-size: 14px; animation: rise .4s var(--fluid) backwards; }
 .alert.ok { background: rgba(76, 240, 160, .14); border-color: rgba(76, 240, 160, .35); color: #b9ffda; }
 .alert.info { background: rgba(139, 108, 255, .18); border-color: rgba(139, 108, 255, .4); color: #e2dbff; }
 .tabs { display: flex; background: rgba(0, 0, 0, .25); border-radius: 18px; padding: 5px; margin-bottom: 22px; border: 1px solid var(--line); }

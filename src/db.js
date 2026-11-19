@@ -97,6 +97,33 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS login_attempts_idx ON login_attempts(key, created_at);
+
+-- ---------- оплата (добавлено) ----------
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS price BIGINT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS commission_percent NUMERIC(5,2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_file INTEGER REFERENCES files(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payout_status TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payout_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_text TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_status TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_note TEXT;
+DO $$ BEGIN
+  ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+  ALTER TABLE orders ADD CONSTRAINT orders_status_check
+    CHECK (status IN ('new','accepted','declined','paid','done','cancelled','refunded'));
+EXCEPTION WHEN others THEN NULL; END $$;
+
+ALTER TABLE confectioners ADD COLUMN IF NOT EXISTS payout_card TEXT;
+ALTER TABLE confectioners ADD COLUMN IF NOT EXISTS payout_holder TEXT;
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
+
 `;
 
 async function migrate() {
@@ -111,4 +138,15 @@ async function query(text, params) {
   return getPool().query(text, params);
 }
 
-module.exports = { query, migrate, getPool };
+const DEFAULT_SETTINGS = { commission_percent: '10', payment_card: '', payment_card_holder: '' };
+
+async function getSettings() {
+  const { rows } = await query('SELECT key, value FROM settings');
+  return { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) };
+}
+
+async function setSetting(key, value) {
+  await query('INSERT INTO settings(key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [key, value]);
+}
+
+module.exports = { query, migrate, getPool, getSettings, setSetting };

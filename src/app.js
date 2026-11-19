@@ -7,6 +7,7 @@ const db = require('./db');
 const auth = require('./auth');
 const tg = require('./telegram');
 const gemini = require('./gemini');
+const orders = require('./orders');
 const { CATEGORIES, CATEGORY_LABELS } = require('./constants');
 
 const app = express();
@@ -104,12 +105,14 @@ app.post('/api/telegram/webhook', wrap(async (req, res) => {
 
 app.use('/api', auth.attach);
 
-app.get('/api/meta', (_req, res) => {
+app.get('/api/meta', wrap(async (_req, res) => {
+  const s = await db.getSettings();
   res.json({
     categories: CATEGORIES.map(([key, label]) => ({ key, label })),
     ai: gemini.enabled(),
+    commission_percent: Number(s.commission_percent) || 0,
   });
-});
+}));
 
 app.get('/api/me', wrap(async (req, res) => {
   let confectioner = null;
@@ -358,11 +361,14 @@ app.get('/api/orders', auth.requireUser(), wrap(async (req, res) => {
      WHERE ${mine}=$1 ORDER BY o.created_at DESC LIMIT 200`,
     [req.user.id]
   );
-  // Контакты открываются только после того, как кондитер принял заказ.
+  // Контакты открываются только после оплаты заказа через сайт.
   const items = rows.map((o) => {
-    const reveal = ['accepted', 'done'].includes(o.status);
+    const reveal = ['paid', 'done'].includes(o.status);
+    const { receipt_file, ...rest } = o;
     return {
-      ...o,
+      ...rest,
+      has_receipt: !!receipt_file,
+      payout_amount: req.user.role === 'confectioner' ? orders.payoutAmount(o) : undefined,
       confectioner_phone: reveal ? o.confectioner_phone : null,
       client_phone: reveal ? o.client_phone : null,
     };
@@ -371,7 +377,7 @@ app.get('/api/orders', auth.requireUser(), wrap(async (req, res) => {
 }));
 
 const TRANSITIONS = {
-  confectioner: { new: ['accepted', 'declined'], accepted: ['done', 'declined'] },
+  confectioner: { new: ['accepted', 'declined'], accepted: ['declined'], paid: ['done'] },
   client: { new: ['cancelled'], accepted: ['cancelled'] },
 };
 
@@ -387,7 +393,83 @@ app.patch('/api/orders/:id', auth.requireUser(), wrap(async (req, res) => {
   }
   const next = String(req.body.status || '');
   if (!(TRANSITIONS[req.user.role][order.status] || []).includes(next)) throw bad('Нельзя изменить статус заявки');
-  await db.query('UPDATE orders SET status=$2, updated_at=now() WHERE id=$1', [id, next]);
+  if (order.payment_status === 'review' && ['declined', 'cancelled'].includes(next)) {
+    throw bad('Оплата по заявке на проверке. Дождитесь решения администратора.');
+  }
+  if (next === 'accepted') {
+    const price = Math.round(Number(String(req.body.price || '').replace(/\s/g, '')));
+    if (!Number.isFinite(price) || price < 1000 || price > 1_000_000_000) throw bad('Укажите цену заказа в сумах (от 1 000)');
+    const { commission_percent } = await db.getSettings();
+    await db.query(
+      "UPDATE orders SET status='accepted', price=$2, commission_percent=$3, updated_at=now() WHERE id=$1",
+      [id, price, Number(commission_percent) || 0]
+    );
+  } else if (next === 'done') {
+    await db.query(
+      `UPDATE orders SET status='done', payout_status=CASE WHEN dispute_status='open' THEN 'hold' ELSE 'due' END, updated_at=now() WHERE id=$1`,
+      [id]
+    );
+    const o = await orders.load(id);
+    tg.notifyAdmins(`📦 Заказ #${id} выполнен. К выплате кондитеру ${tg.esc(o.confectioner_name)}: <b>${orders.fmt(orders.payoutAmount(o))} сум</b>`).catch(() => {});
+  } else {
+    await db.query('UPDATE orders SET status=$2, updated_at=now() WHERE id=$1', [id, next]);
+  }
+  res.json({ ok: true });
+}));
+
+/* ----------------------------- payment ----------------------------- */
+
+async function clientOrder(req) {
+  const { rows } = await db.query('SELECT * FROM orders WHERE id=$1 AND client_id=$2', [Number(req.params.id), req.user.id]);
+  if (!rows[0]) throw new HttpError(404, 'Заявка не найдена');
+  return rows[0];
+}
+
+app.get('/api/orders/:id/payment', auth.requireUser('client'), wrap(async (req, res) => {
+  const o = await clientOrder(req);
+  if (o.status !== 'accepted' || !o.price) throw bad('Заказ сейчас нельзя оплатить');
+  const s = await db.getSettings();
+  res.json({
+    amount: Number(o.price),
+    payment_status: o.payment_status,
+    card: s.payment_card ? { number: s.payment_card, holder: s.payment_card_holder || '' } : null,
+    admin_note: o.admin_note,
+  });
+}));
+
+app.post('/api/orders/:id/receipt', auth.requireUser('client'), upload.single('receipt'), wrap(async (req, res) => {
+  const o = await clientOrder(req);
+  if (o.status !== 'accepted' || !o.price || o.payment_status === 'paid') throw bad('Заказ сейчас нельзя оплатить');
+  if (!req.file) throw bad('Прикрепите чек: фото или PDF до 4 МБ');
+  const f = await db.query(
+    'INSERT INTO files(user_id, name, mime, size, data) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+    [req.user.id, str(req.file.originalname, 120) || 'receipt', req.file.mimetype, req.file.size, req.file.buffer]
+  );
+  await db.query(
+    "UPDATE orders SET payment_status='review', payment_method='card', receipt_file=$2, admin_note=NULL, updated_at=now() WHERE id=$1",
+    [o.id, f.rows[0].id]
+  );
+  try { await tg.notifyPaymentReview(o.id); } catch (e) { console.error('Telegram receipt', e); }
+  res.json({ ok: true });
+}));
+
+app.post('/api/orders/:id/dispute', auth.requireUser('client'), wrap(async (req, res) => {
+  const o = await clientOrder(req);
+  if (!['paid', 'done'].includes(o.status) || o.payout_status === 'paid') throw bad('Жалобу можно открыть только по оплаченному заказу до выплаты кондитеру');
+  const text = str(req.body.text, 1000);
+  if (text.length < 10) throw bad('Опишите проблему подробнее (от 10 символов)');
+  await db.query(
+    `UPDATE orders SET dispute_status='open', dispute_text=$2, payout_status=CASE WHEN payout_status='due' THEN 'hold' ELSE payout_status END, updated_at=now() WHERE id=$1`,
+    [o.id, text]
+  );
+  tg.notifyAdmins(`⚠️ <b>Жалоба по заказу #${o.id}</b>\n${tg.esc(text)}\n\nРешение: админ‑панель → Оплата и заказы.`).catch(() => {});
+  res.json({ ok: true });
+}));
+
+app.put('/api/cabinet/payout', auth.requireUser('confectioner'), wrap(async (req, res) => {
+  const card = String(req.body.card || '').replace(/\D/g, '');
+  if (card.length !== 16) throw bad('Номер карты должен содержать 16 цифр');
+  await db.query('UPDATE confectioners SET payout_card=$2, payout_holder=$3 WHERE user_id=$1', [req.user.id, card, str(req.body.holder, 80) || null]);
   res.json({ ok: true });
 }));
 
@@ -409,7 +491,8 @@ app.post('/api/orders/:id/review', auth.requireUser('client'), wrap(async (req, 
 app.get('/api/cabinet/profile', auth.requireUser('confectioner'), wrap(async (req, res) => {
   const { rows } = await db.query(
     `SELECT full_name, birth_date::text, city, experience_years, workplace, specialties, signature_dishes, about,
-            (certificate_file IS NOT NULL) AS certificate, status, admin_note, created_at
+            (certificate_file IS NOT NULL) AS certificate, status, admin_note, created_at,
+            CASE WHEN payout_card IS NOT NULL THEN '•••• ' || right(payout_card, 4) END AS payout_card_masked, payout_holder
      FROM confectioners WHERE user_id=$1`,
     [req.user.id]
   );
@@ -455,6 +538,8 @@ app.get('/api/admin/stats', auth.requireAdmin, wrap(async (_req, res) => {
     (SELECT count(*) FROM confectioners WHERE status='pending')::int AS pending,
     (SELECT count(*) FROM confectioners WHERE status='rejected')::int AS rejected,
     (SELECT count(*) FROM orders)::int AS orders,
+    (SELECT count(*) FROM orders WHERE payment_status='review')::int AS payments_review,
+    (SELECT count(*) FROM orders WHERE payout_status IN ('due','hold'))::int AS payouts_due,
     (SELECT count(*) FROM admin_chats)::int AS telegram_admins`);
   res.json(rows[0]);
 }));
@@ -484,6 +569,70 @@ app.get('/api/admin/files/:id', auth.requireAdmin, wrap(async (req, res) => {
   res.setHeader('Content-Type', rows[0].mime);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(rows[0].name)}`);
   res.send(rows[0].data);
+}));
+
+app.get('/api/admin/settings', auth.requireAdmin, wrap(async (_req, res) => {
+  res.json(await db.getSettings());
+}));
+
+app.put('/api/admin/settings', auth.requireAdmin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const card = String(b.payment_card || '').replace(/\D/g, '');
+  if (card && card.length !== 16) throw bad('Номер карты должен содержать 16 цифр');
+  const holder = str(b.payment_card_holder, 80);
+  if (card && holder.length < 3) throw bad('Укажите имя владельца карты, как на карте');
+  const pct = Number(String(b.commission_percent ?? '').replace(',', '.'));
+  if (!Number.isFinite(pct) || pct < 0 || pct > 50) throw bad('Комиссия — число от 0 до 50 (%)');
+  await db.setSetting('payment_card', card);
+  await db.setSetting('payment_card_holder', holder);
+  await db.setSetting('commission_percent', String(Math.round(pct * 100) / 100));
+  res.json({ ok: true });
+}));
+
+app.get('/api/admin/orders', auth.requireAdmin, wrap(async (req, res) => {
+  const filters = {
+    review: "o.payment_status='review'",
+    active: "o.status IN ('accepted','paid')",
+    payout: "o.payout_status IN ('due','hold')",
+    dispute: "o.dispute_status='open'",
+    all: 'TRUE',
+  };
+  const where = filters[req.query.filter] || filters.review;
+  const { rows } = await db.query(
+    `SELECT o.*, c.full_name AS confectioner_name, c.payout_card, c.payout_holder, cu.phone AS confectioner_phone,
+            COALESCE(u.name, 'Заказчик') AS client_name, u.phone AS client_phone
+     FROM orders o
+     JOIN confectioners c ON c.user_id=o.confectioner_id
+     JOIN users cu ON cu.id=o.confectioner_id
+     JOIN users u ON u.id=o.client_id
+     WHERE ${where} ORDER BY o.updated_at DESC LIMIT 300`
+  );
+  res.json({ items: rows.map((o) => ({ ...o, payout_amount: orders.payoutAmount(o) })) });
+}));
+
+app.post('/api/admin/orders/:id/action', auth.requireAdmin, wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const note = str(req.body.note, 500) || null;
+  let ok = false;
+  switch (req.body.action) {
+    case 'confirm_payment': ok = await orders.markPaid(id, 'card'); break;
+    case 'reject_payment': ok = await orders.rejectPayment(id, note); break;
+    case 'refund': ok = await orders.refund(id, note || 'Средства возвращены заказчику'); break;
+    case 'payout_done': {
+      const r = await db.query("UPDATE orders SET payout_status='paid', payout_at=now(), updated_at=now() WHERE id=$1 AND status='done' AND payout_status='due' AND dispute_status IS DISTINCT FROM 'open' RETURNING id", [id]);
+      ok = r.rowCount > 0; break;
+    }
+    case 'close_dispute': {
+      const r = await db.query(
+        `UPDATE orders SET dispute_status='rejected', admin_note=COALESCE($2, admin_note),
+           payout_status=CASE WHEN status='done' AND payout_status='hold' THEN 'due' ELSE payout_status END, updated_at=now()
+         WHERE id=$1 AND dispute_status='open' RETURNING id`, [id, note]);
+      ok = r.rowCount > 0; break;
+    }
+    default: throw bad('Неизвестное действие');
+  }
+  if (!ok) throw bad('Действие недоступно для текущего статуса заказа');
+  res.json({ ok: true });
 }));
 
 app.get('/api/admin/telegram', auth.requireAdmin, wrap(async (_req, res) => {

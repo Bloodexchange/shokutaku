@@ -30,39 +30,62 @@
   const { user, confectioner } = await Shk.me();
   if (!user) { location.href = '/client?next=/cabinet#login'; return; }
   const esc = Shk.esc;
+  const money = (n) => Number(n || 0).toLocaleString('ru-RU') + ' сум';
   const ST = {
-    new: ['Новая', 'indigo'], accepted: ['Принята', 'green'], declined: ['Отклонена', 'red'],
-    done: ['Выполнена', 'gold'], cancelled: ['Отменена', ''],
+    new: ['Новая', 'indigo'], accepted: ['Ждёт оплаты', 'gold'], declined: ['Отклонена', 'red'], paid: ['Оплачен', 'green'],
+    done: ['Выполнен', 'green'], cancelled: ['Отменена', ''], refunded: ['Возврат средств', 'red'],
   };
+  const PAYOUT = { due: 'к выплате', hold: 'выплата приостановлена (жалоба)', paid: 'выплачено ✅' };
   const date = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+  const isClient = user.role === 'client';
 
   function orderCard(o) {
-    const [label, cls] = ST[o.status];
-    const isClient = user.role === 'client';
+    let [label, cls] = ST[o.status];
+    if (o.status === 'accepted' && o.payment_status === 'review') [label, cls] = ['Оплата на проверке', 'indigo'];
     const contact = isClient
       ? (o.confectioner_phone ? `<dt>Телефон кондитера</dt><dd><a href="tel:${esc(o.confectioner_phone)}">${esc(o.confectioner_phone)}</a></dd>` : '')
       : (o.client_phone ? `<dt>Телефон заказчика</dt><dd><a href="tel:${esc(o.client_phone)}">${esc(o.client_phone)}</a></dd>` : '');
-    let actions = '';
+    let actions = '', extra = '';
     if (isClient) {
-      if (['new', 'accepted'].includes(o.status)) actions += `<button class="btn btn-ghost btn-sm" data-act="cancelled" data-id="${o.id}">Отменить</button>`;
+      if (o.status === 'accepted' && o.payment_status === 'unpaid') {
+        actions += `<button class="btn btn-gold btn-sm" data-pay="${o.id}">💳 Оплатить ${money(o.price)}</button>`;
+        if (o.admin_note) extra += `<div class="alert">${esc(o.admin_note)}</div>`;
+      }
+      if (o.status === 'accepted' && o.payment_status === 'review') extra += '<div class="alert info">Чек получен. Администратор проверяет поступление, после подтверждения откроются контакты кондитера.</div>';
+      if (['new', 'accepted'].includes(o.status) && o.payment_status !== 'review') actions += `<button class="btn btn-ghost btn-sm" data-act="cancelled" data-id="${o.id}">Отменить</button>`;
+      if (['paid', 'done'].includes(o.status) && o.payout_status !== 'paid' && o.dispute_status !== 'open') actions += `<button class="btn btn-ghost btn-sm" data-dispute="${o.id}">Проблема с заказом</button>`;
+      if (o.dispute_status === 'open') extra += '<div class="alert info">Жалоба отправлена. Администратор свяжется с вами и решит вопрос о возврате.</div>';
       if (o.status === 'done' && !o.reviewed) actions += `<button class="btn btn-gold btn-sm" data-review="${o.id}">Оставить отзыв</button>`;
+      if (o.status === 'new') extra += '<div class="small muted">Ждём, когда кондитер примет заявку и назовёт цену.</div>';
     } else if (confectioner && confectioner.status === 'approved') {
-      if (o.status === 'new') actions += `<button class="btn btn-sm" data-act="accepted" data-id="${o.id}">Принять</button><button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отклонить</button>`;
-      if (o.status === 'accepted') actions += `<button class="btn btn-gold btn-sm" data-act="done" data-id="${o.id}">Заказ выполнен</button><button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отказаться</button>`;
+      if (o.status === 'new') {
+        actions += `<input type="text" inputmode="numeric" placeholder="Цена, сум" data-price="${o.id}" style="max-width:170px;min-height:38px;padding:7px 12px">
+          <button class="btn btn-gold btn-sm" data-accept="${o.id}">Принять с этой ценой</button>
+          <button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отклонить</button>`;
+      }
+      if (o.status === 'accepted') {
+        extra += `<div class="small muted">${o.payment_status === 'review' ? 'Заказчик отправил чек, администратор проверяет оплату.' : 'Ждём оплату заказчика. Контакты откроются после подтверждения оплаты.'}</div>`;
+        if (o.payment_status !== 'review') actions += `<button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отказаться</button>`;
+      }
+      if (o.status === 'paid') actions += `<button class="btn btn-gold btn-sm" data-act="done" data-id="${o.id}">Заказ выполнен</button>`;
+      if (o.dispute_status === 'open') extra += '<div class="alert">Заказчик открыл жалобу. Администратор свяжется с вами.</div>';
     }
-    return `<div class="card order">
+    const money2 = o.price ? `<dt>Цена</dt><dd><b>${money(o.price)}</b>${!isClient ? ` <span class="muted small">(вам ${money(o.payout_amount)}, комиссия ${Number(o.commission_percent || 0)}%)</span>` : ''}</dd>` : '';
+    const payout = !isClient && PAYOUT[o.payout_status] ? `<dt>Выплата</dt><dd>${PAYOUT[o.payout_status]}</dd>` : '';
+    return `<div class="card order" data-order="${o.id}">
       <div class="row"><h3 style="margin:0">#${o.id} · ${esc(o.dish)}</h3><span class="spacer"></span><span class="badge ${cls}">${label}</span></div>
       <dl class="kv small">
         ${isClient ? `<dt>Кондитер</dt><dd><a href="/chef?id=${o.confectioner_id}">${esc(o.confectioner_name)}</a></dd>` : `<dt>Заказчик</dt><dd>${esc(o.client_name)}</dd>`}
-        ${contact}
+        ${contact}${money2}${payout}
         <dt>Компоненты</dt><dd>${esc(o.components || '—')}</dd>
         <dt>Дата</dt><dd>${date(o.event_date)}</dd>
         <dt>Бюджет</dt><dd>${esc(o.budget || '—')}</dd>
         <dt>Комментарий</dt><dd>${esc(o.comment || '—')}</dd>
         <dt>Создана</dt><dd>${date(o.created_at)}</dd>
       </dl>
+      ${extra}
       ${actions ? `<div class="row">${actions}</div>` : ''}
-      <div class="review-slot"></div>
+      <div class="slot"></div>
     </div>`;
   }
 
@@ -70,7 +93,7 @@
     const box = document.getElementById('orders');
     const { items } = await Shk.api('/api/orders');
     box.innerHTML = items.length ? items.map(orderCard).join('')
-      : `<div class="card center muted">${user.role === 'client' ? 'Заявок пока нет. <a href="/catalog">Найдите кондитера</a>' : 'Заявок пока нет.'}</div>`;
+      : `<div class="card center muted">${isClient ? 'Заявок пока нет. <a href="/catalog">Найдите кондитера</a>' : 'Заявок пока нет.'}</div>`;
   }
 
   const pwdForm = `<div class="card"><h3>Сменить пароль</h3>
@@ -80,7 +103,7 @@
       <div><button class="btn btn-ghost" type="submit">Сохранить пароль</button></div>
     </form></div>`;
 
-  if (user.role === 'client') {
+  if (isClient) {
     root.innerHTML = `<h1>Здравствуйте${user.name ? ', ' + esc(user.name) : ''}!</h1>
       <p class="muted">Телефон: ${esc(user.phone)}</p>
       <div class="row" style="margin-bottom:18px"><a class="btn btn-gold" href="/catalog">Найти кондитера</a></div>
@@ -97,6 +120,16 @@
     root.innerHTML = `<h1>Кабинет кондитера</h1>
       <p class="muted">${esc(profile.full_name)} · ${esc(user.phone)}</p>
       ${banner}
+      <div class="card" style="margin-top:18px">
+        <h3>Карта для выплат</h3>
+        <p class="small muted">Заказчик оплачивает заказ через сайт. После выполнения заказа мы переводим вам сумму за вычетом комиссии платформы (${meta.commission_percent}%).
+          ${profile.payout_card_masked ? `Сейчас: <b>${esc(profile.payout_card_masked)}</b>${profile.payout_holder ? ', ' + esc(profile.payout_holder) : ''}.` : '<b>Карта ещё не указана.</b>'}</p>
+        <form id="payout" class="grid-2" novalidate>
+          <div class="field"><label for="po-card">Номер карты (Uzcard / Humo)</label><input id="po-card" type="text" inputmode="numeric" autocomplete="off" placeholder="8600 0000 0000 0000" maxlength="19"></div>
+          <div class="field"><label for="po-holder">Имя на карте</label><input id="po-holder" type="text" maxlength="80" value="${esc(profile.payout_holder || '')}"></div>
+          <div><button class="btn btn-ghost" type="submit">Сохранить карту</button></div>
+        </form>
+      </div>
       <h2 style="margin-top:28px">Заявки на заказ</h2><div class="list" id="orders"></div>
       <h2 style="margin-top:28px">Моя анкета</h2>
       <form class="card" id="profile" novalidate>
@@ -114,6 +147,16 @@
         <button class="btn" type="submit">Сохранить анкету</button>
       </form>
       <div style="margin-top:24px">${pwdForm}</div>`;
+    const cardInput = document.getElementById('po-card');
+    cardInput.addEventListener('input', () => { cardInput.value = cardInput.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 '); });
+    document.getElementById('payout').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await Shk.api('/api/cabinet/payout', { method: 'PUT', body: { card: cardInput.value, holder: document.getElementById('po-holder').value } });
+        Shk.toast('Карта для выплат сохранена');
+        cardInput.value = '';
+      } catch (ex) { Shk.toast(ex.message); }
+    });
     document.getElementById('profile').addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = document.getElementById('p-err');
@@ -139,17 +182,81 @@
     } catch (ex) { Shk.toast(ex.message); }
   });
 
+  async function openPayment(id, slot) {
+    slot.innerHTML = '<p class="muted small">Загружаем реквизиты…</p>';
+    try {
+      const p = await Shk.api(`/api/orders/${id}/payment`);
+      if (!p.card) { slot.innerHTML = '<div class="alert info">Оплата временно недоступна: реквизиты ещё не настроены. Попробуйте позже.</div>'; return; }
+      const num = p.card.number.replace(/(\d{4})(?=\d)/g, '$1 ');
+      slot.innerHTML = `<div class="stack" style="margin-top:12px;padding:16px;border-radius:18px;background:rgba(0,0,0,.25);border:1px solid var(--line)">
+        <div><b>1.</b> Переведите <b class="grad-text" style="font-size:20px">${money(p.amount)}</b> на карту:</div>
+        <div class="row"><code style="font-size:20px;letter-spacing:2px;padding:8px 12px">${esc(num)}</code>
+          <button type="button" class="btn btn-sm" data-copy="${esc(p.card.number)}">Скопировать</button></div>
+        <div>Получатель: <b>${esc(p.card.holder)}</b></div>
+        <div class="small muted">В комментарии к переводу укажите номер заказа: <b>#${id}</b></div>
+        <div><b>2.</b> Прикрепите чек или скриншот перевода:</div>
+        <input type="file" accept="image/*,.pdf" data-receipt-file>
+        <button type="button" class="btn btn-gold" data-receipt="${id}">Я оплатил(а), отправить чек</button>
+        <div class="small muted">После проверки оплаты администратором откроются контакты кондитера. Если заказ выполнят не так, как вы просили, деньги вернёт кондитер.</div>
+      </div>`;
+    } catch (ex) { slot.innerHTML = `<div class="alert">${esc(ex.message)}</div>`; }
+  }
+
   root.addEventListener('click', async (e) => {
-    const act = e.target.closest('[data-act]');
+    const t = (sel) => e.target.closest(sel);
+    if (t('[data-copy]')) {
+      try { await navigator.clipboard.writeText(t('[data-copy]').dataset.copy); Shk.toast('Номер карты скопирован'); } catch { Shk.toast('Скопируйте номер вручную'); }
+      return;
+    }
+    if (t('[data-pay]')) return openPayment(t('[data-pay]').dataset.pay, t('.order').querySelector('.slot'));
+    if (t('[data-receipt]')) {
+      const btn = t('[data-receipt]');
+      const file = t('.order').querySelector('[data-receipt-file]').files[0];
+      if (!file) return Shk.toast('Прикрепите чек о переводе');
+      if (file.size > 4 * 1024 * 1024) return Shk.toast('Файл больше 4 МБ');
+      const fd = new FormData();
+      fd.append('receipt', file);
+      Shk.setBusy(btn, true, 'Отправляем…');
+      try {
+        await Shk.api(`/api/orders/${btn.dataset.receipt}/receipt`, { method: 'POST', form: fd });
+        Shk.toast('Чек отправлен на проверку');
+        await loadOrders();
+      } catch (ex) { Shk.toast(ex.message); Shk.setBusy(btn, false); }
+      return;
+    }
+    if (t('[data-accept]')) {
+      const id = t('[data-accept]').dataset.accept;
+      const price = t('.order').querySelector(`[data-price="${id}"]`).value.replace(/\D/g, '');
+      if (!price || Number(price) < 1000) return Shk.toast('Укажите цену в сумах (от 1 000)');
+      try { await Shk.api('/api/orders/' + id, { method: 'PATCH', body: { status: 'accepted', price } }); Shk.toast('Заявка принята, ждём оплату'); await loadOrders(); }
+      catch (ex) { Shk.toast(ex.message); }
+      return;
+    }
+    if (t('[data-dispute]')) {
+      const id = t('[data-dispute]').dataset.dispute;
+      const slot = t('.order').querySelector('.slot');
+      slot.innerHTML = `<div class="stack" style="margin-top:10px"><textarea maxlength="1000" placeholder="Что не так с заказом? Опишите подробно"></textarea>
+        <button type="button" class="btn btn-red btn-sm" data-dispute-send="${id}">Отправить жалобу</button></div>`;
+      return;
+    }
+    if (t('[data-dispute-send]')) {
+      const b = t('[data-dispute-send]');
+      try {
+        await Shk.api(`/api/orders/${b.dataset.disputeSend}/dispute`, { method: 'POST', body: { text: t('.order').querySelector('.slot textarea').value } });
+        Shk.toast('Жалоба отправлена'); await loadOrders();
+      } catch (ex) { Shk.toast(ex.message); }
+      return;
+    }
+    const act = t('[data-act]');
     if (act) {
       if (act.dataset.act === 'cancelled' && !confirm('Отменить заявку?')) return;
       try { await Shk.api('/api/orders/' + act.dataset.id, { method: 'PATCH', body: { status: act.dataset.act } }); await loadOrders(); }
       catch (ex) { Shk.toast(ex.message); }
       return;
     }
-    const rev = e.target.closest('[data-review]');
+    const rev = t('[data-review]');
     if (rev) {
-      const slot = rev.closest('.order').querySelector('.review-slot');
+      const slot = rev.closest('.order').querySelector('.slot');
       let rating = 5;
       slot.innerHTML = `<div class="stack" style="margin-top:10px"><div class="star-input">${[1,2,3,4,5].map((n) => `<button type="button" data-star="${n}" class="on">★</button>`).join('')}</div>
         <textarea maxlength="1000" placeholder="Как вам заказ?"></textarea><button class="btn btn-sm" type="button" data-send>Отправить отзыв</button></div>`;

@@ -2,6 +2,7 @@
 const db = require('./db');
 const auth = require('./auth');
 const { CATEGORY_LABELS } = require('./constants');
+const orders = require('./orders');
 
 const API = 'https://api.telegram.org';
 
@@ -117,6 +118,39 @@ async function notifyAdmins(text) {
   }
 }
 
+function paymentText(o, headline) {
+  return [
+    `<b>${headline} — заказ #${o.id}</b>`,
+    '',
+    `<b>Сумма:</b> ${orders.fmt(o.price)} сум`,
+    `<b>Блюдо:</b> ${esc(o.dish)}`,
+    `<b>Заказчик:</b> ${esc(o.client_name)}, ${esc(o.client_phone)}`,
+    `<b>Кондитер:</b> ${esc(o.confectioner_name)}`,
+    `<b>Комиссия:</b> ${Number(o.commission_percent || 0)}% · кондитеру ${orders.fmt(orders.payoutAmount(o))} сум`,
+  ].join('\n');
+}
+
+/** Заказчик отправил чек о переводе — админ подтверждает или отклоняет. */
+async function notifyPaymentReview(orderId) {
+  if (!enabled()) return;
+  const chats = await adminChats();
+  if (!chats.length) return;
+  const o = await orders.load(orderId);
+  if (!o) return;
+  let file = null;
+  if (o.receipt_file) file = (await db.query('SELECT name, mime, data FROM files WHERE id=$1', [o.receipt_file])).rows[0];
+  for (const chat of chats) {
+    await call('sendMessage', {
+      chat_id: chat, parse_mode: 'HTML', text: paymentText(o, '💳 Проверьте оплату') + '\n\nСверьте поступление на карту и нажмите кнопку.',
+      reply_markup: { inline_keyboard: [[
+        { text: '✅ Оплата получена', callback_data: `payok:${o.id}` },
+        { text: '❌ Не получена', callback_data: `payno:${o.id}` },
+      ]] },
+    });
+    if (file) await sendDocument(chat, file, `Чек по заказу #${o.id}`);
+  }
+}
+
 async function setStatus(userId, status) {
   await db.query('UPDATE confectioners SET status=$2, updated_at=now() WHERE user_id=$1', [userId, status]);
 }
@@ -125,6 +159,7 @@ const HELP = [
   '<b>Shokutaku 食卓 — админ‑бот</b>',
   '',
   '/pending — анкеты, ожидающие проверки',
+  '/payments — оплаты, ожидающие подтверждения',
   '/stats — статистика сайта',
   '/logout — выйти из бота',
 ].join('\n');
@@ -184,16 +219,25 @@ async function handleUpdate(update) {
     return;
   }
 
+  if (cmd === '/payments') {
+    const { rows } = await db.query("SELECT id FROM orders WHERE payment_status='review' ORDER BY updated_at LIMIT 20");
+    if (!rows.length) return call('sendMessage', { chat_id: chatId, text: 'Оплат на проверке нет 👌' });
+    for (const r of rows) await notifyPaymentReview(r.id);
+    return;
+  }
+
   if (cmd === '/stats') {
     const { rows } = await db.query(`SELECT
       (SELECT count(*) FROM users WHERE role='client')::int AS clients,
       (SELECT count(*) FROM confectioners WHERE status='approved')::int AS approved,
       (SELECT count(*) FROM confectioners WHERE status='pending')::int AS pending,
-      (SELECT count(*) FROM orders)::int AS orders`);
+      (SELECT count(*) FROM orders)::int AS orders,
+      (SELECT count(*) FROM orders WHERE payment_status='review')::int AS review,
+      (SELECT COALESCE(sum(price * commission_percent / 100), 0)::bigint FROM orders WHERE payment_status='paid' AND status IN ('paid','done')) AS commission`);
     const s = rows[0];
     return call('sendMessage', {
       chat_id: chatId, parse_mode: 'HTML',
-      text: `<b>📊 Статистика</b>\nЗаказчиков: ${s.clients}\nКондитеров (приняты): ${s.approved}\nАнкет на проверке: ${s.pending}\nЗаявок на заказ: ${s.orders}`,
+      text: `<b>📊 Статистика</b>\nЗаказчиков: ${s.clients}\nКондитеров (приняты): ${s.approved}\nАнкет на проверке: ${s.pending}\nЗаявок на заказ: ${s.orders}\nОплат на проверке: ${s.review}\nКомиссия платформы: ${orders.fmt(s.commission)} сум`,
     });
   }
 
@@ -206,6 +250,19 @@ async function handleCallback(cb) {
   if (!isAdmin) return call('answerCallbackQuery', { callback_query_id: cb.id, text: 'Нет доступа' });
   const [action, idStr] = String(cb.data || '').split(':');
   const id = Number(idStr);
+  if (['payok', 'payno'].includes(action) && id) {
+    const ok = action === 'payok' ? await orders.markPaid(id, 'card') : await orders.rejectPayment(id);
+    await call('answerCallbackQuery', {
+      callback_query_id: cb.id,
+      text: ok ? (action === 'payok' ? 'Оплата подтверждена, контакты открыты' : 'Оплата отклонена') : 'Статус уже изменён',
+    });
+    const o = await orders.load(id);
+    if (o) {
+      const head = o.payment_status === 'paid' ? '✅ Оплата подтверждена' : o.payment_status === 'review' ? '💳 Проверьте оплату' : '❌ Оплата не подтверждена';
+      await call('editMessageText', { chat_id: chatId, message_id: cb.message.message_id, text: paymentText(o, head), parse_mode: 'HTML' });
+    }
+    return;
+  }
   if (!['approve', 'reject'].includes(action) || !id) {
     return call('answerCallbackQuery', { callback_query_id: cb.id });
   }
@@ -233,5 +290,5 @@ async function webhookInfo() { return call('getWebhookInfo', {}); }
 async function botInfo() { return call('getMe', {}); }
 
 module.exports = {
-  enabled, handleUpdate, notifyNewApplication, notifyAdmins, setWebhook, webhookInfo, botInfo, esc, ageFrom,
+  enabled, handleUpdate, notifyNewApplication, notifyAdmins, notifyPaymentReview, setWebhook, webhookInfo, botInfo, esc, ageFrom,
 };

@@ -38,6 +38,23 @@
 
       <div class="card" id="tg"></div>
 
+      <form class="card" id="pay-settings" novalidate>
+        <h2>Оплата: реквизиты и комиссия</h2>
+        <p class="small muted">Эти данные заказчики видят при оплате заказа. Номер карты и имя владельца вводите сами.</p>
+        <div class="grid-2">
+          <div class="field"><label for="s-card">Номер карты для приёма оплаты</label><input id="s-card" type="text" inputmode="numeric" autocomplete="off" maxlength="19" placeholder="8600 0000 0000 0000"></div>
+          <div class="field"><label for="s-holder">Имя владельца карты</label><input id="s-holder" type="text" maxlength="80" placeholder="Как на карте"></div>
+          <div class="field"><label for="s-pct">Комиссия платформы, %</label><input id="s-pct" type="number" min="0" max="50" step="0.5"></div>
+        </div>
+        <button class="btn btn-gold" type="submit">Сохранить</button>
+      </form>
+
+      <div class="card">
+        <div class="row"><h2 style="margin:0">Заказы и оплаты</h2><span class="spacer"></span>
+          <select id="o-filter" style="width:auto"><option value="review">Оплата на проверке</option><option value="dispute">Жалобы</option><option value="payout">К выплате кондитерам</option><option value="active">Активные</option><option value="all">Все</option></select></div>
+        <div class="list" id="orders" style="margin-top:16px"></div>
+      </div>
+
       <div class="card">
         <div class="row"><h2 style="margin:0">Анкеты кондитеров</h2><span class="spacer"></span>
           <select id="filter" style="width:auto"><option value="pending">На проверке</option><option value="approved">Приняты</option><option value="rejected">Отклонены</option><option value="">Все</option></select></div>
@@ -55,14 +72,14 @@
   async function showPanel() {
     $('login').classList.add('hidden');
     $('panel').classList.remove('hidden');
-    await Promise.all([loadStats(), loadApps(), loadTg()]);
+    await Promise.all([loadStats(), loadApps(), loadTg(), loadSettings(), loadOrders()]);
   }
 
   async function loadStats() {
     const s = await Shk.api('/api/admin/stats');
     $('stats').innerHTML = [
       ['На проверке', s.pending], ['Кондитеров', s.approved], ['Отклонено', s.rejected],
-      ['Заказчиков', s.clients], ['Заявок', s.orders], ['Telegram‑админов', s.telegram_admins],
+      ['Заказчиков', s.clients], ['Заявок', s.orders], ['Оплат на проверке', s.payments_review], ['К выплате', s.payouts_due], ['Telegram‑админов', s.telegram_admins],
     ].map(([l, v]) => `<div class="stat"><b>${v}</b><span class="muted small">${l}</span></div>`).join('');
   }
 
@@ -78,7 +95,7 @@
       <p>${hook ? '✅ Бот подключён к сайту.' : '⚠️ Бот ещё не подключён к сайту.'} ${t.webhook && t.webhook.last_error_message ? `<span class="badge red">Ошибка: ${esc(t.webhook.last_error_message)}</span>` : ''}</p>
       <ol class="small muted"><li>Нажмите «Подключить бота» (один раз после деплоя).</li>
       <li>Откройте бота в Telegram и отправьте: <code>/login ваш_логин ваш_пароль</code>. Сообщение с паролем бот сразу удалит.</li>
-      <li>Новые анкеты будут приходить с кнопками «Принять» и «Отклонить».</li></ol>
+      <li>Новые анкеты будут приходить с кнопками «Принять» и «Отклонить», а чеки об оплате — с кнопками «Оплата получена / Не получена».</li></ol>
       <button class="btn btn-sm" id="tg-connect">${hook ? 'Переподключить бота' : 'Подключить бота'}</button>
       ${t.bot ? `<a class="btn btn-ghost btn-sm" href="https://t.me/${esc(t.bot.username)}" target="_blank" rel="noopener">Открыть бота</a>` : ''}`;
     $('tg-connect').addEventListener('click', async () => {
@@ -86,6 +103,62 @@
       catch (e) { Shk.toast(e.message, 6000); }
     });
   }
+
+  const money = (n) => Number(n || 0).toLocaleString('ru-RU') + ' сум';
+  const fmtCard = (c) => String(c || '').replace(/(\d{4})(?=\d)/g, '$1 ');
+  async function loadSettings() {
+    const s = await Shk.api('/api/admin/settings');
+    $('s-card').value = fmtCard(s.payment_card);
+    $('s-holder').value = s.payment_card_holder || '';
+    $('s-pct').value = s.commission_percent;
+  }
+  $('s-card').addEventListener('input', () => { $('s-card').value = fmtCard($('s-card').value.replace(/\D/g, '').slice(0, 16)); });
+  $('pay-settings').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await Shk.api('/api/admin/settings', { method: 'PUT', body: { payment_card: $('s-card').value, payment_card_holder: $('s-holder').value, commission_percent: $('s-pct').value } });
+      Shk.toast('Настройки оплаты сохранены');
+    } catch (ex) { Shk.toast(ex.message); }
+  });
+
+  const OST = { new: 'Новая', accepted: 'Ждёт оплаты', declined: 'Отклонена', paid: 'Оплачен', done: 'Выполнен', cancelled: 'Отменена', refunded: 'Возврат' };
+  async function loadOrders() {
+    const { items } = await Shk.api('/api/admin/orders?filter=' + $('o-filter').value);
+    $('orders').innerHTML = items.length ? items.map((o) => {
+      const btn = (action, label, cls = '') => `<button class="btn btn-sm ${cls}" data-oact="${action}" data-id="${o.id}">${label}</button>`;
+      let acts = '';
+      if (o.payment_status === 'review') acts += btn('confirm_payment', '✅ Оплата получена', 'btn-gold') + btn('reject_payment', '❌ Не получена');
+      if (o.dispute_status === 'open') acts += btn('refund', '↩️ Вернуть деньги заказчику', 'btn-red') + btn('close_dispute', 'Отклонить жалобу');
+      else if (o.payment_status === 'paid' && o.payout_status !== 'paid') acts += btn('refund', '↩️ Возврат');
+      if (o.status === 'done' && o.payout_status === 'due') acts += btn('payout_done', '💸 Выплата кондитеру сделана', 'btn-gold');
+      return `<div class="card" style="box-shadow:none">
+        <div class="row"><h3 style="margin:0">#${o.id} · ${esc(o.dish)}</h3><span class="badge">${OST[o.status] || o.status}</span>
+          ${o.payment_status === 'review' ? '<span class="badge gold">чек на проверке</span>' : ''}${o.dispute_status === 'open' ? '<span class="badge red">жалоба</span>' : ''}
+          <span class="spacer"></span><span class="small muted">${new Date(o.updated_at).toLocaleString('ru-RU')}</span></div>
+        <dl class="kv small" style="margin-top:10px">
+          <dt>Сумма</dt><dd>${o.price ? `<b>${money(o.price)}</b> · комиссия ${Number(o.commission_percent || 0)}% · кондитеру ${money(o.payout_amount)}` : '—'}</dd>
+          <dt>Заказчик</dt><dd>${esc(o.client_name)}, <a href="tel:${esc(o.client_phone)}">${esc(o.client_phone)}</a></dd>
+          <dt>Кондитер</dt><dd>${esc(o.confectioner_name)}, <a href="tel:${esc(o.confectioner_phone)}">${esc(o.confectioner_phone)}</a></dd>
+          <dt>Карта кондитера</dt><dd>${o.payout_card ? `${fmtCard(o.payout_card)}${o.payout_holder ? ' · ' + esc(o.payout_holder) : ''}` : '<span class="muted">не указана</span>'}</dd>
+          <dt>Чек</dt><dd>${o.receipt_file ? `<a href="/api/admin/files/${o.receipt_file}" target="_blank">Открыть чек</a>` : '—'}</dd>
+          ${o.dispute_text ? `<dt>Жалоба</dt><dd>${esc(o.dispute_text)}</dd>` : ''}
+          <dt>Выплата</dt><dd>${{ none: '—', due: 'к выплате', hold: 'приостановлена (жалоба)', paid: 'выплачено' }[o.payout_status] || o.payout_status}</dd>
+        </dl>
+        ${acts ? `<div class="row" style="margin-top:10px"><input type="text" placeholder="Комментарий (необязательно)" data-onote="${o.id}" style="flex:1;min-width:200px">${acts}</div>` : ''}
+      </div>`;
+    }).join('') : '<p class="muted">Заказов нет.</p>';
+  }
+  $('o-filter').addEventListener('change', loadOrders);
+  $('orders').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-oact]');
+    if (!b) return;
+    const note = (document.querySelector(`[data-onote="${b.dataset.id}"]`) || {}).value || '';
+    try {
+      await Shk.api(`/api/admin/orders/${b.dataset.id}/action`, { method: 'POST', body: { action: b.dataset.oact, note } });
+      Shk.toast('Готово');
+      loadOrders(); loadStats();
+    } catch (ex) { Shk.toast(ex.message); }
+  });
 
   async function loadApps() {
     const { items } = await Shk.api('/api/admin/applications' + ($('filter').value ? '?status=' + $('filter').value : ''));
