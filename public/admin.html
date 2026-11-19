@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Админ‑панель — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section" style="padding-top:28px">
+  <div class="container">
+    <form class="card narrow" id="login" style="margin:0 auto" novalidate>
+      <h2>Вход администратора</h2>
+      <div class="field"><label for="a-login">Логин</label><input id="a-login" type="text" autocomplete="username" required></div>
+      <div class="field"><label for="a-pass">Пароль</label><input id="a-pass" type="password" autocomplete="current-password" required></div>
+      <div class="alert hidden" id="a-err"></div>
+      <button class="btn btn-block" type="submit">Войти</button>
+    </form>
+
+    <div id="panel" class="hidden stack">
+      <div class="row"><h1 style="margin:0">Админ‑панель</h1><span class="spacer"></span><button class="btn btn-ghost btn-sm" id="logout">Выйти</button></div>
+      <div class="stats" id="stats"></div>
+
+      <div class="card" id="tg"></div>
+
+      <div class="card">
+        <div class="row"><h2 style="margin:0">Анкеты кондитеров</h2><span class="spacer"></span>
+          <select id="filter" style="width:auto"><option value="pending">На проверке</option><option value="approved">Приняты</option><option value="rejected">Отклонены</option><option value="">Все</option></select></div>
+        <div class="list" id="apps" style="margin-top:16px"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+(async () => {
+  const esc = Shk.esc;
+  const $ = (id) => document.getElementById(id);
+  const ST = { pending: ['На проверке', 'indigo'], approved: ['Принят', 'green'], rejected: ['Отклонён', 'red'] };
+
+  async function showPanel() {
+    $('login').classList.add('hidden');
+    $('panel').classList.remove('hidden');
+    await Promise.all([loadStats(), loadApps(), loadTg()]);
+  }
+
+  async function loadStats() {
+    const s = await Shk.api('/api/admin/stats');
+    $('stats').innerHTML = [
+      ['На проверке', s.pending], ['Кондитеров', s.approved], ['Отклонено', s.rejected],
+      ['Заказчиков', s.clients], ['Заявок', s.orders], ['Telegram‑админов', s.telegram_admins],
+    ].map(([l, v]) => `<div class="stat"><b>${v}</b><span class="muted small">${l}</span></div>`).join('');
+  }
+
+  async function loadTg() {
+    const box = $('tg');
+    const t = await Shk.api('/api/admin/telegram');
+    if (!t.enabled) {
+      box.innerHTML = `<h2>Telegram‑бот</h2><p class="muted">Бот не настроен. Добавьте переменную <code>TELEGRAM_BOT_TOKEN</code> в настройках Vercel и сделайте Redeploy.</p>`;
+      return;
+    }
+    const hook = t.webhook && t.webhook.url;
+    box.innerHTML = `<h2>Telegram‑бот ${t.bot ? '@' + esc(t.bot.username) : ''}</h2>
+      <p>${hook ? '✅ Бот подключён к сайту.' : '⚠️ Бот ещё не подключён к сайту.'} ${t.webhook && t.webhook.last_error_message ? `<span class="badge red">Ошибка: ${esc(t.webhook.last_error_message)}</span>` : ''}</p>
+      <ol class="small muted"><li>Нажмите «Подключить бота» (один раз после деплоя).</li>
+      <li>Откройте бота в Telegram и отправьте: <code>/login ваш_логин ваш_пароль</code>. Сообщение с паролем бот сразу удалит.</li>
+      <li>Новые анкеты будут приходить с кнопками «Принять» и «Отклонить».</li></ol>
+      <button class="btn btn-sm" id="tg-connect">${hook ? 'Переподключить бота' : 'Подключить бота'}</button>
+      ${t.bot ? `<a class="btn btn-ghost btn-sm" href="https://t.me/${esc(t.bot.username)}" target="_blank" rel="noopener">Открыть бота</a>` : ''}`;
+    $('tg-connect').addEventListener('click', async () => {
+      try { await Shk.api('/api/admin/telegram/connect', { method: 'POST' }); Shk.toast('Бот подключён'); loadTg(); }
+      catch (e) { Shk.toast(e.message, 6000); }
+    });
+  }
+
+  async function loadApps() {
+    const { items } = await Shk.api('/api/admin/applications' + ($('filter').value ? '?status=' + $('filter').value : ''));
+    $('apps').innerHTML = items.length ? items.map((c) => {
+      const [label, cls] = ST[c.status];
+      return `<div class="card" style="box-shadow:none">
+        <div class="row"><h3 style="margin:0">#${c.user_id} · ${esc(c.full_name)}</h3><span class="badge ${cls}">${label}</span><span class="spacer"></span>
+          <span class="small muted">${new Date(c.created_at).toLocaleString('ru-RU')}</span></div>
+        <dl class="kv small" style="margin-top:10px">
+          <dt>Телефон</dt><dd><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></dd>
+          <dt>Возраст</dt><dd>${c.age} ${c.age < 18 ? `<span class="badge gold">несовершеннолетний</span>` : ''}</dd>
+          ${c.age < 18 ? `<dt>Родитель</dt><dd>${esc(c.parent_name)}, <a href="tel:${esc(c.parent_phone)}">${esc(c.parent_phone)}</a></dd>` : ''}
+          <dt>Город</dt><dd>${esc(c.city || '—')}</dd>
+          <dt>Стаж</dt><dd>${Shk.years(c.experience_years)}</dd>
+          <dt>Где работал(а)</dt><dd>${esc(c.workplace || '—')}</dd>
+          <dt>Направления</dt><dd>${esc(c.specialty_labels.join(', '))}</dd>
+          <dt>Лучше всего</dt><dd>${esc(c.signature_dishes || '—')}</dd>
+          <dt>О себе</dt><dd>${esc(c.about || '—')}</dd>
+          <dt>Сертификат</dt><dd>${c.certificate_file ? `<a href="/api/admin/files/${c.certificate_file}" target="_blank">Открыть файл</a>` : 'нет'}</dd>
+        </dl>
+        <div class="row" style="margin-top:10px">
+          <input type="text" placeholder="Комментарий для кондитера (необязательно)" data-note="${c.user_id}" value="${esc(c.admin_note || '')}" style="flex:1;min-width:200px">
+          ${c.status !== 'approved' ? `<button class="btn btn-sm" data-set="approved" data-id="${c.user_id}">✅ Принять</button>` : ''}
+          ${c.status !== 'rejected' ? `<button class="btn btn-red btn-sm" data-set="rejected" data-id="${c.user_id}">❌ Отклонить</button>` : ''}
+        </div>
+      </div>`;
+    }).join('') : '<p class="muted">Анкет нет.</p>';
+  }
+
+  $('apps').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-set]');
+    if (!b) return;
+    const note = document.querySelector(`[data-note="${b.dataset.id}"]`).value;
+    try {
+      await Shk.api('/api/admin/applications/' + b.dataset.id, { method: 'POST', body: { status: b.dataset.set, note } });
+      Shk.toast(b.dataset.set === 'approved' ? 'Кондитер принят' : 'Анкета отклонена');
+      loadApps(); loadStats();
+    } catch (ex) { Shk.toast(ex.message); }
+  });
+  $('filter').addEventListener('change', loadApps);
+  $('logout').addEventListener('click', async () => { await Shk.api('/api/admin/logout', { method: 'POST' }); location.reload(); });
+
+  $('login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    Shk.setBusy(btn, true, 'Входим…');
+    try {
+      await Shk.api('/api/admin/login', { method: 'POST', body: { login: $('a-login').value, password: $('a-pass').value } });
+      await showPanel();
+    } catch (ex) { Shk.showError($('a-err'), ex.message); } finally { Shk.setBusy(btn, false); }
+  });
+
+  const { admin } = await Shk.api('/api/admin/me');
+  if (admin) showPanel();
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>

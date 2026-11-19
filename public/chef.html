@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кондитер — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section" style="padding-top:28px">
+  <div class="container" id="root"><p class="muted">Загрузка…</p></div>
+</main>
+<script>
+(async () => {
+  const root = document.getElementById('root');
+  const id = new URLSearchParams(location.search).get('id');
+  let data;
+  try { data = await Shk.api('/api/confectioners/' + encodeURIComponent(id)); }
+  catch (e) { root.innerHTML = `<div class="card center"><h2>Кондитер не найден</h2><a class="btn" href="/catalog">К списку кондитеров</a></div>`; return; }
+  const c = data.item;
+  document.title = `${c.name} — Shokutaku 食卓`;
+  const { user } = await Shk.me();
+  root.innerHTML = `
+    <p><a href="/catalog">← Все кондитеры</a></p>
+    <div class="catalog-layout profile-layout">
+      <div class="stack">
+        <div class="card">
+          <div class="conf-head">
+            <div class="avatar lg">${Shk.esc(Shk.initials(c.name))}</div>
+            <div>
+              <h1 style="font-size:30px;margin:0">${Shk.esc(c.name)}</h1>
+              <div class="muted">${Shk.esc(c.city || 'Узбекистан')}</div>
+              <div class="row" style="margin-top:8px;gap:6px">
+                ${c.reviews ? `<span class="badge gold"><span class="stars">${Shk.stars(c.rating)}</span> ${c.rating} · ${c.reviews} отз.</span>` : '<span class="badge">Новый кондитер</span>'}
+                ${c.certificate ? '<span class="badge green">✓ Сертификат проверен</span>' : ''}
+                <span class="badge indigo">Выполнено заказов: ${c.orders_done}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <dl class="kv">
+            <dt>Стаж</dt><dd>${Shk.years(c.experience)}</dd>
+            <dt>Лучше всего готовит</dt><dd>${Shk.esc(c.dishes || '—')}</dd>
+            <dt>Где работал(а)</dt><dd>${Shk.esc(c.workplace || '—')}</dd>
+            <dt>Сертификат</dt><dd>${c.certificate ? 'Есть' : 'Нет'}</dd>
+            <dt>Направления</dt><dd><div class="chips">${c.specialty_labels.map((s) => `<span class="chip">${Shk.esc(s)}</span>`).join('')}</div></dd>
+          </dl>
+          ${c.about ? `<h3 style="margin-top:18px">О себе</h3><p>${Shk.esc(c.about)}</p>` : ''}
+        </div>
+        <div class="card">
+          <h3>Отзывы</h3>
+          ${data.reviews.length ? data.reviews.map((r) => `<div style="border-top:1px solid var(--line);padding:10px 0">
+            <div><span class="stars">${Shk.stars(r.rating)}</span> <b>${Shk.esc(r.author)}</b> <span class="muted small">${new Date(r.created_at).toLocaleDateString('ru-RU')}</span></div>
+            ${r.text ? `<div>${Shk.esc(r.text)}</div>` : ''}</div>`).join('') : '<p class="muted">Отзывов пока нет.</p>'}
+        </div>
+      </div>
+      <aside class="card filters" id="order-box"></aside>
+    </div>`;
+
+  const box = document.getElementById('order-box');
+  if (!user) {
+    box.innerHTML = `<h3>Заказать у кондитера</h3><p class="muted">Чтобы отправить заявку, войдите или зарегистрируйтесь как заказчик.</p>
+      <a class="btn btn-block" href="/client?next=${encodeURIComponent(location.pathname + location.search)}">Регистрация заказчика</a>
+      <a class="btn btn-ghost btn-block" style="margin-top:8px" href="/client?next=${encodeURIComponent(location.pathname + location.search)}#login">Войти</a>`;
+    return;
+  }
+  if (user.role !== 'client') {
+    box.innerHTML = `<h3>Заказать у кондитера</h3><p class="muted">Заявки отправляют заказчики. Вы вошли как кондитер.</p>`;
+    return;
+  }
+  const minDate = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  box.innerHTML = `<h3>Заявка на заказ</h3>
+    <form id="order" novalidate>
+      <div class="field"><label for="o-dish">Блюдо</label><input id="o-dish" type="text" maxlength="150" placeholder="Торт «Медовик», 2 кг" required></div>
+      <div class="field"><label for="o-comp">Компоненты и пожелания по составу</label><textarea id="o-comp" maxlength="500" placeholder="Без орехов, крем на сливках, ягоды"></textarea></div>
+      <div class="grid-2">
+        <div class="field"><label for="o-date">Дата</label><input id="o-date" type="date" min="${minDate}"></div>
+        <div class="field"><label for="o-budget">Бюджет</label><input id="o-budget" type="text" maxlength="60" placeholder="350 000 сум"></div>
+      </div>
+      <div class="field"><label for="o-comment">Комментарий</label><textarea id="o-comment" maxlength="1000" placeholder="Надпись, оформление, доставка"></textarea></div>
+      <div class="alert hidden" id="o-err"></div>
+      <button class="btn btn-gold btn-block" type="submit">Отправить заявку</button>
+      <p class="small muted">Когда кондитер примет заявку, вы увидите его телефон в кабинете.</p>
+    </form>`;
+  document.getElementById('order').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('o-err');
+    err.classList.add('hidden');
+    const btn = e.target.querySelector('button');
+    const dish = document.getElementById('o-dish').value.trim();
+    if (dish.length < 2) return Shk.showError(err, 'Укажите, какое блюдо нужно');
+    Shk.setBusy(btn, true, 'Отправляем…');
+    try {
+      await Shk.api('/api/orders', { method: 'POST', body: {
+        confectioner_id: c.id, dish,
+        components: document.getElementById('o-comp').value, event_date: document.getElementById('o-date').value,
+        budget: document.getElementById('o-budget').value, comment: document.getElementById('o-comment').value,
+      } });
+      box.innerHTML = `<h3>Заявка отправлена! 🎉</h3><p class="muted">Кондитер получит её в своём кабинете. Статус смотрите в разделе «Кабинет».</p><a class="btn btn-block" href="/cabinet">Мои заявки</a>`;
+    } catch (ex) { Shk.showError(err, ex.message); Shk.setBusy(btn, false); }
+  });
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>

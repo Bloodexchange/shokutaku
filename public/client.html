@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход и регистрация заказчика — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section">
+  <div class="container narrow">
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button data-tab="register" class="active">Регистрация</button>
+        <button data-tab="login">Вход</button>
+      </div>
+
+      <form id="register" class="stack" novalidate>
+        <div>
+          <h2>Регистрация заказчика</h2>
+          <p class="muted small">Кондитер? <a href="/confectioner">Регистрация для кондитеров</a></p>
+        </div>
+        <div class="field"><label for="r-name">Как к вам обращаться <span class="muted">(необязательно)</span></label>
+          <input id="r-name" name="name" type="text" autocomplete="given-name" maxlength="80"></div>
+        <div class="field"><label for="r-phone">Номер телефона</label>
+          <input id="r-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" required></div>
+        <div class="field"><label for="r-pass">Пароль</label>
+          <input id="r-pass" name="password" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="hint">Минимум 8 символов</div></div>
+        <div class="field"><label for="r-pass2">Повторите пароль</label>
+          <input id="r-pass2" type="password" autocomplete="new-password" required></div>
+        <label class="check"><input type="checkbox" id="r-terms" required> <span>Я принимаю <a href="/terms" target="_blank">условия пользования</a></span></label>
+        <div class="alert hidden" id="r-err"></div>
+        <button class="btn btn-block" type="submit">Зарегистрироваться</button>
+      </form>
+
+      <form id="login" class="stack hidden" novalidate>
+        <h2>Вход</h2>
+        <div class="field"><label for="l-phone">Номер телефона</label>
+          <input id="l-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" required></div>
+        <div class="field"><label for="l-pass">Пароль</label>
+          <input id="l-pass" name="password" type="password" autocomplete="current-password" required></div>
+        <div class="alert hidden" id="l-err"></div>
+        <button class="btn btn-block" type="submit">Войти</button>
+        <p class="small muted center">Вход общий для заказчиков и кондитеров.</p>
+      </form>
+    </div>
+  </div>
+</main>
+<script>
+(() => {
+  const forms = { register: document.getElementById('register'), login: document.getElementById('login') };
+  const tabs = document.querySelectorAll('.tabs button');
+  function show(name) {
+    tabs.forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+    Object.entries(forms).forEach(([k, f]) => f.classList.toggle('hidden', k !== name));
+  }
+  tabs.forEach((b) => b.addEventListener('click', () => { show(b.dataset.tab); history.replaceState(null, '', '#' + b.dataset.tab); }));
+  if (location.hash === '#login') show('login');
+  Shk.phoneMask(document.getElementById('r-phone'));
+  Shk.phoneMask(document.getElementById('l-phone'));
+  const next = new URLSearchParams(location.search).get('next');
+  const go = (user) => { location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : (user.role === 'confectioner' ? '/cabinet' : '/catalog'); };
+
+  forms.register.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('r-err');
+    err.classList.add('hidden');
+    const f = e.target, btn = f.querySelector('button[type=submit]');
+    const pass = f.password.value, pass2 = document.getElementById('r-pass2').value;
+    if (pass.length < 8) return Shk.showError(err, 'Пароль должен содержать минимум 8 символов');
+    if (pass !== pass2) return Shk.showError(err, 'Пароли не совпадают');
+    if (!document.getElementById('r-terms').checked) return Shk.showError(err, 'Нужно принять условия пользования');
+    Shk.setBusy(btn, true, 'Создаём аккаунт…');
+    try {
+      const { user } = await Shk.api('/api/auth/register-client', { method: 'POST', body: { name: f.name.value, phone: f.phone.value, password: pass } });
+      Shk.toast('Аккаунт создан!');
+      go(user);
+    } catch (ex) { Shk.showError(err, ex.message); } finally { Shk.setBusy(btn, false); }
+  });
+
+  forms.login.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('l-err');
+    err.classList.add('hidden');
+    const f = e.target, btn = f.querySelector('button[type=submit]');
+    Shk.setBusy(btn, true, 'Входим…');
+    try {
+      const { user } = await Shk.api('/api/auth/login', { method: 'POST', body: { phone: f.phone.value, password: f.password.value } });
+      go(user);
+    } catch (ex) { Shk.showError(err, ex.message); } finally { Shk.setBusy(btn, false); }
+  });
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>

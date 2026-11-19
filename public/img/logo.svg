@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Shokutaku 食卓">
+  <title>Shokutaku 食卓</title>
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#3b3f7a"/><stop offset="0.6" stop-color="#232552"/><stop offset="1" stop-color="#15163a"/>
+    </radialGradient>
+    <radialGradient id="moon" cx="42%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#fff4cf"/><stop offset="0.65" stop-color="#ffd98a"/><stop offset="1" stop-color="#f4b860"/>
+    </radialGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e7e3f3"/>
+    </linearGradient>
+    <linearGradient id="lacquer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9434f"/><stop offset="1" stop-color="#9e2433"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#e9a94b"/>
+    </linearGradient>
+    <radialGradient id="dango" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ece6dc"/>
+    </radialGradient>
+    <clipPath id="disc"><circle cx="256" cy="256" r="240"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="252" fill="url(#gold)"/>
+  <circle cx="256" cy="256" r="240" fill="url(#sky)"/>
+  <g clip-path="url(#disc)">
+    <g fill="#fff6d8" opacity="0.85">
+      <circle cx="92" cy="140" r="2.6"/><circle cx="128" cy="92" r="1.8"/><circle cx="404" cy="104" r="2.4"/>
+      <circle cx="438" cy="178" r="1.6"/><circle cx="74" cy="236" r="1.6"/><circle cx="170" cy="62" r="1.4"/>
+      <circle cx="356" cy="58" r="1.8"/><circle cx="452" cy="250" r="1.4"/>
+    </g>
+    <circle cx="256" cy="196" r="136" fill="url(#moon)"/>
+    <g fill="#f0c070" opacity="0.45">
+      <circle cx="200" cy="150" r="16"/><circle cx="318" cy="232" r="11"/><circle cx="296" cy="120" r="8"/>
+    </g>
+    <!-- лакированный столик (食卓) -->
+    <rect x="70" y="342" width="372" height="20" rx="6" fill="url(#lacquer)"/>
+    <rect x="70" y="342" width="372" height="5" rx="2.5" fill="#f08a8f" opacity="0.6"/>
+    <rect x="100" y="360" width="16" height="44" rx="3" fill="#8a1f2c"/>
+    <rect x="396" y="360" width="16" height="44" rx="3" fill="#8a1f2c"/>
+    <!-- кролик -->
+    <g>
+      <ellipse cx="166" cy="290" rx="16" ry="15" fill="url(#fur)"/>
+      <g transform="rotate(-14 250 120)">
+        <ellipse cx="250" cy="120" rx="17" ry="58" fill="url(#fur)"/>
+        <ellipse cx="250" cy="124" rx="8" ry="44" fill="#f7b6c2"/>
+      </g>
+      <g transform="rotate(12 286 124)">
+        <ellipse cx="286" cy="124" rx="16" ry="54" fill="url(#fur)"/>
+        <ellipse cx="286" cy="128" rx="7.5" ry="40" fill="#f7b6c2"/>
+      </g>
+      <ellipse cx="226" cy="282" rx="76" ry="62" fill="url(#fur)"/>
+      <ellipse cx="190" cy="300" rx="44" ry="38" fill="#f1edf8"/><path d="M160 300 q30 -34 70 -6" stroke="#ddd6ea" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="272" cy="206" r="50" fill="url(#fur)"/>
+      <circle cx="292" cy="200" r="6.5" fill="#2a2348"/>
+      <circle cx="294.5" cy="197.5" r="2" fill="#ffffff"/>
+      <ellipse cx="296" cy="224" rx="11" ry="7" fill="#f7b6c2" opacity="0.75"/>
+      <path d="M316 212 q5 3 0 7 q-4 -3 0 -7z" fill="#e87d93"/>
+      <path d="M314 222 q-6 6 -12 2 M314 222 q2 7 -4 9" stroke="#c9b9d6" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="206" cy="337" rx="42" ry="8" fill="#f4f1fa"/>
+      <ellipse cx="288" cy="304" rx="15" ry="22" fill="#ffffff" transform="rotate(-20 288 304)"/>
+      <ellipse cx="300" cy="336" rx="18" ry="7" fill="#ffffff"/>
+    </g>
+    <!-- цукими‑данго на подставке -->
+    <g>
+      <path d="M332 342 h84 l-8 -22 h-68z" fill="url(#lacquer)"/>
+      <rect x="336" y="314" width="76" height="8" rx="3" fill="#e8b85a"/>
+      <circle cx="350" cy="300" r="15" fill="url(#dango)"/>
+      <circle cx="374" cy="300" r="15" fill="url(#dango)"/>
+      <circle cx="398" cy="300" r="15" fill="url(#dango)"/>
+      <circle cx="362" cy="276" r="15" fill="url(#dango)"/>
+      <circle cx="386" cy="276" r="15" fill="url(#dango)"/>
+      <circle cx="374" cy="252" r="15" fill="#ffd0dc"/>
+      <circle cx="369" cy="247" r="4" fill="#ffffff" opacity="0.8"/>
+    </g>
+    <!-- иероглифы 食卓 -->
+    <g fill="url(#gold)">
+      <path transform="translate(176 482) scale(0.074 -0.074)" d="M663 557Q668 562 678.0 573.0Q688 584 694 584Q700 584 725.0 566.5Q750 549 772.0 530.0Q794 511 794 504Q784 492 764 488V263Q764 261 758 256Q861 184 861 171Q861 168 852 166L834 165Q762 131 655 105Q759 51 943 32L942 21Q908 11 885.5 -18.0Q863 -47 854 -90Q756 -62 685.5 -21.5Q615 19 565 82V81Q431 18 195 -67Q186 -87 169 -90L104 43Q135 45 245 56V544Q147 491 60 461L55 473Q128 515 202.0 576.5Q276 638 332 703Q402 785 416 861L596 807Q594 797 583.5 792.0Q573 787 549 784Q654 680 949 625V610Q915 600 892.5 567.0Q870 534 865 497Q755 544 667.0 614.5Q579 685 534 773Q494 720 427.0 665.5Q360 611 279 564L361 530H445Q445 605 438 653Q520 636 550.0 626.0Q580 616 580 609Q580 605 574 602L559 592V530H640ZM649 409V501H354V409ZM354 286H649V380H354ZM479 258H354V68L557 93Q506 165 479 258ZM669 224H649V258H497Q540 173 625 122Q680 171 732 240Q696 224 669 224Z"/>
+      <path transform="translate(262 482) scale(0.074 -0.074)" d="M720 630Q723 634 730.5 642.5Q738 651 743.0 655.5Q748 660 752 660Q758 660 785.0 641.0Q812 622 835.5 601.0Q859 580 859 573Q845 557 820 552V454Q823 331 827 265Q820 254 786.0 240.0Q752 226 724 226H704V274H555V146H763L794 189Q800 196 809.0 208.5Q818 221 823.5 227.0Q829 233 833 233Q839 233 868.5 211.0Q898 189 924.5 165.0Q951 141 951 134Q947 119 923 119H555V58L556 21Q557 -20 560 -57Q555 -67 527.5 -77.5Q500 -88 460 -88Q433 -88 433 -68Q437 -22 439 50V119H219Q148 118 69 105L43 154Q98 148 176 146H439V274H292V247Q292 241 277.0 232.0Q262 223 239.5 216.5Q217 210 195 210Q183 210 177.0 216.0Q171 222 171 230Q176 282 178 369V449Q178 575 165 654L299 600H436V650Q436 776 423 855Q509 837 542.0 826.5Q575 816 575 809Q575 806 568 801L553 791V730H708L739 772Q743 777 752.0 789.5Q761 802 767.0 808.0Q773 814 777 814Q783 814 811.5 792.5Q840 771 865.5 748.0Q891 725 891 718Q887 702 863 702H553V600H695ZM704 453V572H292V453ZM704 425H292V302H704Z"/>
+    </g>
+  </g>
+</svg>

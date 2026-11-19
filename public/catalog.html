@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кондитеры — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section" style="padding-top:28px">
+  <div class="container">
+    <div class="ai-box" id="ai-box">
+      <h2>✨ ИИ‑подбор кондитера</h2>
+      <p class="muted small" style="margin-top:-4px">Опишите блюдо и компоненты, и Gemini подберёт кондитеров, которые справятся лучше всего.</p>
+      <form id="ai-form" class="stack">
+        <div class="row">
+          <input id="ai-query" type="text" maxlength="500" placeholder="Например: шоколадный торт на 3 кг с вишней, без орехов, на детский день рождения">
+        </div>
+        <div class="row">
+          <input id="ai-dish" type="text" maxlength="100" placeholder="Блюдо: торт, печенье, чизкейк…" style="flex:1;min-width:180px">
+          <input id="ai-components" type="text" maxlength="300" placeholder="Компоненты через запятую: вишня, шоколад, сливки" style="flex:2;min-width:220px">
+          <button class="btn btn-gold" type="submit" id="ai-btn">Подобрать</button>
+        </div>
+      </form>
+      <div id="ai-result" class="ai-result hidden"></div>
+    </div>
+
+    <div class="catalog-layout">
+      <aside class="card filters">
+        <h3>Фильтры</h3>
+        <div class="field"><label>Направления</label><div class="cat-list" id="f-cats"></div></div>
+        <div class="field"><label for="f-exp">Опыт от</label>
+          <select id="f-exp"><option value="0">Любой</option><option value="1">1 года</option><option value="3">3 лет</option><option value="5">5 лет</option><option value="10">10 лет</option></select></div>
+        <div class="field"><label for="f-city">Город</label><input id="f-city" type="text" placeholder="Любой" maxlength="60"></div>
+        <label class="check"><input type="checkbox" id="f-cert"> <span>Только с сертификатом</span></label>
+        <button class="btn btn-ghost btn-sm btn-block" id="f-reset" style="margin-top:14px">Сбросить</button>
+      </aside>
+
+      <section>
+        <div class="searchbar">
+          <input id="q" type="search" placeholder="Поиск по имени, блюдам, месту работы…" maxlength="100">
+          <select id="sort" aria-label="Сортировка">
+            <option value="rating">Сначала с высоким рейтингом</option>
+            <option value="experience">Сначала опытные</option>
+            <option value="new">Сначала новые</option>
+          </select>
+        </div>
+        <div id="notice" class="alert info hidden" style="margin-bottom:16px"></div>
+        <div class="grid" id="grid"></div>
+      </section>
+    </div>
+  </div>
+</main>
+<script>
+(async () => {
+  const grid = document.getElementById('grid');
+  const notice = document.getElementById('notice');
+  const meta = await Shk.api('/api/meta');
+  if (!meta.ai) document.getElementById('ai-box').classList.add('hidden');
+  document.getElementById('f-cats').innerHTML = meta.categories.map((c) =>
+    `<label><input type="checkbox" value="${c.key}"> ${Shk.esc(c.label)}</label>`).join('');
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('cat')) params.get('cat').split(',').forEach((k) => { const el = document.querySelector(`#f-cats input[value="${CSS.escape(k)}"]`); if (el) el.checked = true; });
+  if (params.get('q')) document.getElementById('q').value = params.get('q');
+
+  let timer;
+  async function load() {
+    const qs = new URLSearchParams();
+    const q = document.getElementById('q').value.trim();
+    const cats = [...document.querySelectorAll('#f-cats input:checked')].map((x) => x.value);
+    const city = document.getElementById('f-city').value.trim();
+    if (q) qs.set('q', q);
+    if (cats.length) qs.set('cat', cats.join(','));
+    if (document.getElementById('f-exp').value !== '0') qs.set('minExp', document.getElementById('f-exp').value);
+    if (document.getElementById('f-cert').checked) qs.set('cert', '1');
+    if (city) qs.set('city', city);
+    qs.set('sort', document.getElementById('sort').value);
+    const filtered = !!(q || cats.length || city || qs.has('minExp') || qs.has('cert'));
+    try {
+      const { items } = await Shk.api('/api/confectioners?' + qs);
+      notice.classList.add('hidden');
+      if (!items.length && filtered) {
+        notice.textContent = 'По этим фильтрам никого не нашли. Попробуйте изменить условия или воспользуйтесь ИИ‑подбором.';
+        notice.classList.remove('hidden');
+        grid.innerHTML = '';
+        return;
+      }
+      if (!items.length) {
+        notice.textContent = 'Мы проверяем первых кондитеров. Совсем скоро здесь появятся их карточки.';
+        notice.classList.remove('hidden');
+      }
+      const cards = items.map((c) => Shk.confCard(c));
+      while (!filtered && cards.length < 6) cards.push(Shk.confCard(null));
+      grid.innerHTML = cards.join('');
+    } catch (e) {
+      grid.innerHTML = `<div class="alert">${Shk.esc(e.message)}</div>`;
+    }
+  }
+  const reload = () => { clearTimeout(timer); timer = setTimeout(load, 250); };
+  ['q', 'f-city'].forEach((id) => document.getElementById(id).addEventListener('input', reload));
+  ['sort', 'f-exp', 'f-cert'].forEach((id) => document.getElementById(id).addEventListener('change', load));
+  document.getElementById('f-cats').addEventListener('change', load);
+  document.getElementById('f-reset').addEventListener('click', () => {
+    document.querySelectorAll('#f-cats input').forEach((x) => { x.checked = false; });
+    document.getElementById('f-exp').value = '0';
+    document.getElementById('f-cert').checked = false;
+    document.getElementById('f-city').value = '';
+    document.getElementById('q').value = '';
+    load();
+  });
+  load();
+
+  // ИИ‑подбор
+  const out = document.getElementById('ai-result');
+  document.getElementById('ai-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('ai-btn');
+    const body = {
+      query: document.getElementById('ai-query').value.trim(),
+      dish: document.getElementById('ai-dish').value.trim(),
+      components: document.getElementById('ai-components').value.split(',').map((s) => s.trim()).filter(Boolean),
+    };
+    if (!body.query && !body.dish && !body.components.length) {
+      out.innerHTML = 'Опишите, что вы хотите заказать.';
+      out.classList.remove('hidden');
+      return;
+    }
+    Shk.setBusy(btn, true, 'Думаю…');
+    out.classList.remove('hidden');
+    out.innerHTML = 'Gemini подбирает кондитеров…';
+    try {
+      const r = await Shk.api('/api/ai/match', { method: 'POST', body });
+      const labels = Object.fromEntries(meta.categories.map((c) => [c.key, c.label]));
+      const detected = r.detected && (r.detected.categories || []).filter((k) => labels[k]);
+      out.innerHTML = `${r.summary ? `<div>${Shk.esc(r.summary)}</div>` : ''}
+        ${detected && detected.length ? `<div class="chips" style="margin-top:8px">${detected.map((k) => `<span class="chip" style="background:rgba(255,255,255,.15)">${Shk.esc(labels[k])}</span>`).join('')}</div>` : ''}
+        ${!r.items.length ? '<div style="margin-top:8px">Подходящих кондитеров пока нет. Как только они появятся, ИИ сможет их подобрать.</div>' : ''}`;
+      if (r.items.length) {
+        notice.textContent = `✨ Результаты ИИ‑подбора (${r.items.length}). Нажмите «Сбросить», чтобы вернуться к каталогу.`;
+        notice.classList.remove('hidden');
+        grid.innerHTML = r.items.map((c) => Shk.confCard(c, { ai: true })).join('');
+        grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch (ex) {
+      out.textContent = ex.message;
+    } finally { Shk.setBusy(btn, false); }
+  });
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стать кондитером — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section">
+  <div class="container narrow">
+    <div class="card" id="wizard">
+      <h2>Анкета кондитера</h2>
+      <p class="muted small">Уже зарегистрированы? <a href="/client#login">Войти</a></p>
+      <div class="progress"><span class="on"></span><span></span><span></span></div>
+
+      <form id="form" novalidate>
+        <!-- Шаг 1 -->
+        <fieldset data-step="1" style="border:0;padding:0;margin:0">
+          <h3>1. Аккаунт и личные данные</h3>
+          <div class="field"><label for="full_name">Имя и фамилия</label>
+            <input id="full_name" name="full_name" type="text" autocomplete="name" maxlength="100" required></div>
+          <div class="grid-2">
+            <div class="field"><label for="phone">Номер телефона</label>
+              <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+998 90 123 45 67" required></div>
+            <div class="field"><label for="city">Город</label>
+              <input id="city" name="city" type="text" list="cities" placeholder="Ташкент" maxlength="60">
+              <datalist id="cities"><option>Ташкент</option><option>Самарканд</option><option>Бухара</option><option>Андижан</option><option>Наманган</option><option>Фергана</option><option>Нукус</option><option>Карши</option><option>Навои</option><option>Джизак</option><option>Ургенч</option><option>Термез</option><option>Гулистан</option></datalist></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label for="password">Пароль</label>
+              <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+              <div class="hint">Минимум 8 символов</div></div>
+            <div class="field"><label for="password2">Повторите пароль</label>
+              <input id="password2" type="password" autocomplete="new-password" required></div>
+          </div>
+          <div class="field"><label for="birth_date">Дата рождения</label>
+            <input id="birth_date" name="birth_date" type="date" required>
+            <div class="hint">Кондитером можно стать с 15 лет. До 18 лет нужен контакт одного из родителей.</div></div>
+          <div id="parent" class="hidden">
+            <div class="alert info" style="margin-bottom:14px">Вам меньше 18 лет, поэтому укажите имя и телефон одного из родителей.</div>
+            <div class="grid-2">
+              <div class="field"><label for="parent_name">Имя родителя</label>
+                <input id="parent_name" name="parent_name" type="text" maxlength="100"></div>
+              <div class="field"><label for="parent_phone">Телефон родителя</label>
+                <input id="parent_phone" name="parent_phone" type="tel" inputmode="tel" placeholder="+998 90 123 45 67"></div>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Шаг 2 -->
+        <fieldset data-step="2" class="hidden" style="border:0;padding:0;margin:0">
+          <h3>2. Опыт и блюда</h3>
+          <div class="grid-2">
+            <div class="field"><label for="experience_years">Опыт (лет)</label>
+              <input id="experience_years" name="experience_years" type="number" min="0" max="80" inputmode="numeric" required></div>
+            <div class="field"><label for="workplace">Где работали или работаете сейчас</label>
+              <input id="workplace" name="workplace" type="text" maxlength="300" placeholder="Кондитерская, ресторан, дома на заказ…"></div>
+          </div>
+          <div class="field"><label>Направления <span class="muted">(выберите всё, что подходит)</span></label>
+            <div class="cat-grid" id="cats"></div></div>
+          <div class="field"><label for="signature_dishes">Что вы готовите лучше всего</label>
+            <textarea id="signature_dishes" name="signature_dishes" maxlength="600" placeholder="Например: медовик, наполеон, чизкейк Нью‑Йорк, овсяное печенье, творожные десерты" required></textarea></div>
+          <div class="field"><label for="about">О себе <span class="muted">(необязательно)</span></label>
+            <textarea id="about" name="about" maxlength="1000" placeholder="Пара слов о вашем стиле, ингредиентах, оформлении"></textarea></div>
+          <div class="field"><label for="certificate">Сертификат <span class="muted">(если есть, необязательно)</span></label>
+            <input id="certificate" name="certificate" type="file" accept=".pdf,image/*">
+            <div class="hint">PDF или фото, до 4 МБ</div></div>
+        </fieldset>
+
+        <!-- Шаг 3 -->
+        <fieldset data-step="3" class="hidden" style="border:0;padding:0;margin:0">
+          <h3>3. Условия для кондитеров</h3>
+          <div class="rule" style="margin-bottom:14px">Если заказ не выполнен так, как его просили, или вкус не тот, ответственность за это берёт кондитер, и средства заказчику возвращает тоже кондитер.</div>
+          <ul class="small muted">
+            <li>Анкету проверяет администратор. Пока она на проверке, вас не видно в каталоге.</li>
+            <li>Вы отвечаете за качество, свежесть и безопасность продуктов, а также за соблюдение сроков.</li>
+            <li>Состав и аллергены вы честно сообщаете заказчику.</li>
+            <li>Полные условия: <a href="/terms#confectioner" target="_blank">условия пользования</a>.</li>
+          </ul>
+          <label class="check" style="margin-top:12px"><input type="checkbox" id="terms" name="terms"> <span>Я прочитал(а) и принимаю условия пользования, включая правило об ответственности и возврате средств</span></label>
+        </fieldset>
+
+        <div class="alert hidden" id="err" style="margin-top:16px"></div>
+        <div class="row" style="margin-top:18px">
+          <button type="button" class="btn btn-ghost hidden" id="back">Назад</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn" id="next">Далее</button>
+          <button type="submit" class="btn btn-gold hidden" id="submit">Отправить анкету</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card center hidden" id="done">
+      <img src="/img/logo.svg" alt="" width="120" height="120">
+      <h2>Анкета отправлена!</h2>
+      <p class="muted">Администратор проверит ваши данные и примет решение. Статус анкеты всегда виден в личном кабинете.</p>
+      <a class="btn" href="/cabinet">Перейти в кабинет</a>
+    </div>
+  </div>
+</main>
+<script>
+(async () => {
+  const form = document.getElementById('form');
+  const err = document.getElementById('err');
+  const steps = [...form.querySelectorAll('fieldset')];
+  const bars = document.querySelectorAll('.progress span');
+  const btnBack = document.getElementById('back'), btnNext = document.getElementById('next'), btnSubmit = document.getElementById('submit');
+  let step = 0;
+  ['phone', 'parent_phone'].forEach((id) => Shk.phoneMask(document.getElementById(id)));
+
+  const today = new Date();
+  const bd = document.getElementById('birth_date');
+  bd.max = new Date(today.getFullYear() - 15, today.getMonth(), today.getDate()).toISOString().slice(0, 10);
+  bd.min = `${today.getFullYear() - 90}-01-01`;
+
+  const { categories } = await Shk.api('/api/meta');
+  document.getElementById('cats').innerHTML = categories.map((c) =>
+    `<label><input type="checkbox" name="specialties" value="${c.key}"> ${Shk.esc(c.label)}</label>`).join('');
+
+  function age() {
+    if (!bd.value) return null;
+    const b = new Date(bd.value + 'T00:00:00');
+    let a = today.getFullYear() - b.getFullYear();
+    if (today.getMonth() < b.getMonth() || (today.getMonth() === b.getMonth() && today.getDate() < b.getDate())) a--;
+    return a;
+  }
+  bd.addEventListener('change', () => {
+    const a = age();
+    document.getElementById('parent').classList.toggle('hidden', !(a !== null && a >= 15 && a < 18));
+  });
+
+  function render() {
+    steps.forEach((s, i) => s.classList.toggle('hidden', i !== step));
+    bars.forEach((b, i) => b.classList.toggle('on', i <= step));
+    btnBack.classList.toggle('hidden', step === 0);
+    btnNext.classList.toggle('hidden', step === steps.length - 1);
+    btnSubmit.classList.toggle('hidden', step !== steps.length - 1);
+    err.classList.add('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const digits = (v) => v.replace(/\D/g, '');
+  function validate(i) {
+    const v = (id) => document.getElementById(id).value.trim();
+    if (i === 0) {
+      if (v('full_name').length < 2) return 'Укажите имя и фамилию';
+      const p = digits(v('phone'));
+      if (p.length < 9 || (p.startsWith('998') && p.length !== 12)) return 'Введите корректный номер телефона';
+      if (document.getElementById('password').value.length < 8) return 'Пароль должен содержать минимум 8 символов';
+      if (document.getElementById('password').value !== document.getElementById('password2').value) return 'Пароли не совпадают';
+      const a = age();
+      if (a === null) return 'Укажите дату рождения';
+      if (a < 15) return 'Регистрация кондитеров доступна с 15 лет';
+      if (a < 18) {
+        if (v('parent_name').length < 2) return 'Укажите имя одного из родителей';
+        const pp = digits(v('parent_phone'));
+        if (pp.length < 9 || (pp.startsWith('998') && pp.length !== 12)) return 'Укажите корректный телефон родителя';
+      }
+    }
+    if (i === 1) {
+      const e = v('experience_years');
+      if (e === '' || !Number.isInteger(Number(e)) || Number(e) < 0) return 'Укажите опыт в годах (целое число)';
+      if (!form.querySelector('input[name=specialties]:checked')) return 'Выберите хотя бы одно направление';
+      if (v('signature_dishes').length < 3) return 'Напишите, какие блюда вы готовите лучше всего';
+      const f = document.getElementById('certificate').files[0];
+      if (f && f.size > 4 * 1024 * 1024) return 'Файл сертификата больше 4 МБ';
+    }
+    if (i === 2 && !document.getElementById('terms').checked) return 'Нужно принять условия пользования';
+    return null;
+  }
+
+  btnNext.addEventListener('click', () => {
+    const m = validate(step);
+    if (m) return Shk.showError(err, m);
+    step++; render();
+  });
+  btnBack.addEventListener('click', () => { step--; render(); });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    for (let i = 0; i < steps.length; i++) {
+      const m = validate(i);
+      if (m) { step = i; render(); return Shk.showError(err, m); }
+    }
+    const fd = new FormData(form);
+    fd.delete('specialties');
+    fd.append('specialties', JSON.stringify([...form.querySelectorAll('input[name=specialties]:checked')].map((x) => x.value)));
+    fd.set('terms', 'true');
+    const file = document.getElementById('certificate').files[0];
+    if (!file) fd.delete('certificate'); else fd.append('has_certificate_file', 'true');
+    if ((age() ?? 99) >= 18) { fd.delete('parent_name'); fd.delete('parent_phone'); }
+    Shk.setBusy(btnSubmit, true, 'Отправляем…');
+    try {
+      await Shk.api('/api/auth/register-confectioner', { method: 'POST', form: fd });
+      document.getElementById('wizard').classList.add('hidden');
+      document.getElementById('done').classList.remove('hidden');
+      window.scrollTo({ top: 0 });
+    } catch (ex) {
+      Shk.showError(err, ex.message);
+    } finally { Shk.setBusy(btnSubmit, false); }
+  });
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>

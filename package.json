@@ -1,0 +1,23 @@
+{
+  "name": "shokutaku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shokutaku 食卓 — платформа, которая связывает заказчиков с кондитерами",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "hash-password": "node scripts/hash-password.js",
+    "check": "node -e \"require('./src/app'); console.log('ok')\""
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "multer": "^2.5.0",
+    "pg": "^8.13.1"
+  }
+}

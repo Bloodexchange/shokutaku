@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Личный кабинет — Shokutaku 食卓</title>
+<meta name="description" content="Shokutaku 食卓 — платформа, которая связывает заказчиков с проверенными кондитерами. Торты, десерты и выпечка на заказ, подбор кондитера с помощью ИИ.">
+<meta name="theme-color" content="#262857">
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta property="og:title" content="Shokutaku 食卓">
+<meta property="og:description" content="Кондитеры на заказ: торты, десерты, выпечка. Подбор с помощью ИИ.">
+<meta property="og:image" content="/img/logo-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="/js/common.js"></script>
+</head>
+<body>
+<header class="site-header"></header>
+<main class="section" style="padding-top:28px">
+  <div class="container" id="root"><p class="muted">Загрузка…</p></div>
+</main>
+<script>
+(async () => {
+  const root = document.getElementById('root');
+  const { user, confectioner } = await Shk.me();
+  if (!user) { location.href = '/client?next=/cabinet#login'; return; }
+  const esc = Shk.esc;
+  const ST = {
+    new: ['Новая', 'indigo'], accepted: ['Принята', 'green'], declined: ['Отклонена', 'red'],
+    done: ['Выполнена', 'gold'], cancelled: ['Отменена', ''],
+  };
+  const date = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+
+  function orderCard(o) {
+    const [label, cls] = ST[o.status];
+    const isClient = user.role === 'client';
+    const contact = isClient
+      ? (o.confectioner_phone ? `<dt>Телефон кондитера</dt><dd><a href="tel:${esc(o.confectioner_phone)}">${esc(o.confectioner_phone)}</a></dd>` : '')
+      : (o.client_phone ? `<dt>Телефон заказчика</dt><dd><a href="tel:${esc(o.client_phone)}">${esc(o.client_phone)}</a></dd>` : '');
+    let actions = '';
+    if (isClient) {
+      if (['new', 'accepted'].includes(o.status)) actions += `<button class="btn btn-ghost btn-sm" data-act="cancelled" data-id="${o.id}">Отменить</button>`;
+      if (o.status === 'done' && !o.reviewed) actions += `<button class="btn btn-gold btn-sm" data-review="${o.id}">Оставить отзыв</button>`;
+    } else if (confectioner && confectioner.status === 'approved') {
+      if (o.status === 'new') actions += `<button class="btn btn-sm" data-act="accepted" data-id="${o.id}">Принять</button><button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отклонить</button>`;
+      if (o.status === 'accepted') actions += `<button class="btn btn-gold btn-sm" data-act="done" data-id="${o.id}">Заказ выполнен</button><button class="btn btn-ghost btn-sm" data-act="declined" data-id="${o.id}">Отказаться</button>`;
+    }
+    return `<div class="card order">
+      <div class="row"><h3 style="margin:0">#${o.id} · ${esc(o.dish)}</h3><span class="spacer"></span><span class="badge ${cls}">${label}</span></div>
+      <dl class="kv small">
+        ${isClient ? `<dt>Кондитер</dt><dd><a href="/chef?id=${o.confectioner_id}">${esc(o.confectioner_name)}</a></dd>` : `<dt>Заказчик</dt><dd>${esc(o.client_name)}</dd>`}
+        ${contact}
+        <dt>Компоненты</dt><dd>${esc(o.components || '—')}</dd>
+        <dt>Дата</dt><dd>${date(o.event_date)}</dd>
+        <dt>Бюджет</dt><dd>${esc(o.budget || '—')}</dd>
+        <dt>Комментарий</dt><dd>${esc(o.comment || '—')}</dd>
+        <dt>Создана</dt><dd>${date(o.created_at)}</dd>
+      </dl>
+      ${actions ? `<div class="row">${actions}</div>` : ''}
+      <div class="review-slot"></div>
+    </div>`;
+  }
+
+  async function loadOrders() {
+    const box = document.getElementById('orders');
+    const { items } = await Shk.api('/api/orders');
+    box.innerHTML = items.length ? items.map(orderCard).join('')
+      : `<div class="card center muted">${user.role === 'client' ? 'Заявок пока нет. <a href="/catalog">Найдите кондитера</a>' : 'Заявок пока нет.'}</div>`;
+  }
+
+  const pwdForm = `<div class="card"><h3>Сменить пароль</h3>
+    <form id="pwd" class="grid-2" novalidate>
+      <div class="field"><label for="old">Текущий пароль</label><input id="old" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="new">Новый пароль</label><input id="new" type="password" autocomplete="new-password" minlength="8"></div>
+      <div><button class="btn btn-ghost" type="submit">Сохранить пароль</button></div>
+    </form></div>`;
+
+  if (user.role === 'client') {
+    root.innerHTML = `<h1>Здравствуйте${user.name ? ', ' + esc(user.name) : ''}!</h1>
+      <p class="muted">Телефон: ${esc(user.phone)}</p>
+      <div class="row" style="margin-bottom:18px"><a class="btn btn-gold" href="/catalog">Найти кондитера</a></div>
+      <h2>Мои заявки</h2><div class="list" id="orders"></div>
+      <div style="margin-top:24px">${pwdForm}</div>`;
+  } else {
+    const { profile } = await Shk.api('/api/cabinet/profile');
+    const meta = await Shk.api('/api/meta');
+    const banner = {
+      pending: '<div class="alert info">⏳ Анкета на проверке. Администратор рассмотрит её в ближайшее время. Пока вы не видны в каталоге.</div>',
+      approved: '<div class="alert ok">✅ Анкета одобрена! Вы видны в каталоге и можете принимать заказы.</div>',
+      rejected: `<div class="alert">❌ Анкета отклонена.${profile.admin_note ? ' Комментарий: ' + esc(profile.admin_note) : ''} Вы можете обновить данные ниже.</div>`,
+    }[profile.status];
+    root.innerHTML = `<h1>Кабинет кондитера</h1>
+      <p class="muted">${esc(profile.full_name)} · ${esc(user.phone)}</p>
+      ${banner}
+      <h2 style="margin-top:28px">Заявки на заказ</h2><div class="list" id="orders"></div>
+      <h2 style="margin-top:28px">Моя анкета</h2>
+      <form class="card" id="profile" novalidate>
+        <div class="grid-2">
+          <div class="field"><label for="p-exp">Опыт (лет)</label><input id="p-exp" type="number" min="0" max="80" value="${profile.experience_years}"></div>
+          <div class="field"><label for="p-city">Город</label><input id="p-city" type="text" maxlength="60" value="${esc(profile.city || '')}"></div>
+        </div>
+        <div class="field"><label for="p-work">Где работали или работаете</label><input id="p-work" type="text" maxlength="300" value="${esc(profile.workplace || '')}"></div>
+        <div class="field"><label>Направления</label><div class="cat-grid">${meta.categories.map((c) =>
+          `<label><input type="checkbox" value="${c.key}" ${profile.specialties.includes(c.key) ? 'checked' : ''}> ${esc(c.label)}</label>`).join('')}</div></div>
+        <div class="field"><label for="p-dishes">Что вы готовите лучше всего</label><textarea id="p-dishes" maxlength="600">${esc(profile.signature_dishes || '')}</textarea></div>
+        <div class="field"><label for="p-about">О себе</label><textarea id="p-about" maxlength="1000">${esc(profile.about || '')}</textarea></div>
+        <p class="small muted">Сертификат: ${profile.certificate ? 'загружен' : 'не загружен'}.</p>
+        <div class="alert hidden" id="p-err"></div>
+        <button class="btn" type="submit">Сохранить анкету</button>
+      </form>
+      <div style="margin-top:24px">${pwdForm}</div>`;
+    document.getElementById('profile').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('p-err');
+      err.classList.add('hidden');
+      try {
+        await Shk.api('/api/cabinet/profile', { method: 'PUT', body: {
+          experience_years: Number(document.getElementById('p-exp').value),
+          city: document.getElementById('p-city').value, workplace: document.getElementById('p-work').value,
+          specialties: [...e.target.querySelectorAll('.cat-grid input:checked')].map((x) => x.value),
+          signature_dishes: document.getElementById('p-dishes').value, about: document.getElementById('p-about').value,
+        } });
+        Shk.toast('Анкета сохранена');
+      } catch (ex) { Shk.showError(err, ex.message); }
+    });
+  }
+
+  document.getElementById('pwd').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await Shk.api('/api/auth/change-password', { method: 'POST', body: { old_password: document.getElementById('old').value, new_password: document.getElementById('new').value } });
+      e.target.reset();
+      Shk.toast('Пароль изменён');
+    } catch (ex) { Shk.toast(ex.message); }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      if (act.dataset.act === 'cancelled' && !confirm('Отменить заявку?')) return;
+      try { await Shk.api('/api/orders/' + act.dataset.id, { method: 'PATCH', body: { status: act.dataset.act } }); await loadOrders(); }
+      catch (ex) { Shk.toast(ex.message); }
+      return;
+    }
+    const rev = e.target.closest('[data-review]');
+    if (rev) {
+      const slot = rev.closest('.order').querySelector('.review-slot');
+      let rating = 5;
+      slot.innerHTML = `<div class="stack" style="margin-top:10px"><div class="star-input">${[1,2,3,4,5].map((n) => `<button type="button" data-star="${n}" class="on">★</button>`).join('')}</div>
+        <textarea maxlength="1000" placeholder="Как вам заказ?"></textarea><button class="btn btn-sm" type="button" data-send>Отправить отзыв</button></div>`;
+      slot.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
+        rating = Number(b.dataset.star);
+        slot.querySelectorAll('[data-star]').forEach((x) => x.classList.toggle('on', Number(x.dataset.star) <= rating));
+      }));
+      slot.querySelector('[data-send]').addEventListener('click', async () => {
+        try {
+          await Shk.api(`/api/orders/${rev.dataset.review}/review`, { method: 'POST', body: { rating, text: slot.querySelector('textarea').value } });
+          Shk.toast('Спасибо за отзыв!');
+          await loadOrders();
+        } catch (ex) { Shk.toast(ex.message); }
+      });
+    }
+  });
+
+  loadOrders().catch((e) => { document.getElementById('orders').innerHTML = `<div class="alert">${esc(e.message)}</div>`; });
+})();
+</script>
+<footer class="site-footer"></footer>
+</body>
+</html>
