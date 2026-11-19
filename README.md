@@ -2,7 +2,7 @@
 
 Платформа, которая связывает заказчиков с кондитерами.
 
-![Логотип](public/img/logo-horizontal.svg)
+<img src="public/img/logo.svg" alt="Логотип" width="220">
 
 ## Что умеет сайт
 
