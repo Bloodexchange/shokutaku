@@ -471,7 +471,40 @@
     "SESSION_SECRET не задан (минимум 16 символов)": "SESSION_SECRET ko‘rsatilmagan (kamida 16 ta belgi)",
     "Нужно войти в аккаунт": "Akkauntga kirish kerak",
     "Недостаточно прав": "Huquqlar yetarli emas",
-    "Требуется вход администратора": "Administrator sifatida kirish talab qilinadi"
+    "Требуется вход администратора": "Administrator sifatida kirish talab qilinadi",
+    "Получение заказа": "Buyurtmani olish",
+    "🏃 Самовывоз": "🏃 O‘zi olib ketish",
+    "🚚 Доставка": "🚚 Yetkazib berish",
+    "Адрес кондитера и маршрут откроются в кабинете после оплаты.": "Qandolatchining manzili va yo‘nalish to‘lovdan keyin kabinetda ochiladi.",
+    "Кондитер сообщит адрес после оплаты.": "Qandolatchi manzilni to‘lovdan keyin aytadi.",
+    "Отметьте точку доставки на карте: нажмите на карту, найдите адрес через поиск или определите своё местоположение.": "Yetkazib berish nuqtasini xaritada belgilang: xaritani bosing, qidiruv orqali manzilni toping yoki joylashuvingizni aniqlang.",
+    "Адрес доставки": "Yetkazib berish manzili",
+    "Улица, дом": "Ko‘cha, uy",
+    "Найти": "Topish",
+    "Подъезд, этаж, квартира, ориентир": "Podyezd, qavat, xonadon, mo‘ljal",
+    "Надпись, оформление, пожелания": "Yozuv, bezak, istaklar",
+    "Адрес не найден, отметьте точку на карте": "Manzil topilmadi, nuqtani xaritada belgilang",
+    "Укажите адрес доставки на карте или текстом": "Yetkazib berish manzilini xaritada yoki matn bilan kiriting",
+    "Карта не загрузилась. Напишите адрес текстом.": "Xarita yuklanmadi. Manzilni matn bilan yozing.",
+    "Карта недоступна": "Xarita mavjud emas",
+    "Маршрут:": "Yo‘nalish:",
+    "🗺 Яндекс Карты": "🗺 Yandex Xaritalar",
+    "🗺 Показать на карте": "🗺 Xaritada ko‘rsatish",
+    "Адрес доставки откроется после оплаты": "Yetkazib berish manzili to‘lovdan keyin ochiladi",
+    "Кондитер ещё не указал адрес. Уточните его по телефону.": "Qandolatchi hali manzilni ko‘rsatmagan. Uni telefon orqali aniqlang.",
+    "Адрес кондитера откроется после оплаты": "Qandolatchining manzili to‘lovdan keyin ochiladi",
+    "Получение": "Olish usuli",
+    "🏃 Самовывоз: заказчик заберёт сам": "🏃 Buyurtmachi o‘zi olib ketadi",
+    "Адрес кухни для самовывоза": "Olib ketish uchun oshxona manzili",
+    "Отметьте точку на карте. Заказчик увидит адрес и маршрут только после оплаты заказа.": "Nuqtani xaritada belgilang. Buyurtmachi manzil va yo‘nalishni faqat buyurtma to‘langach ko‘radi.",
+    "(можно указать позже в кабинете)": "(keyinroq kabinetda ko‘rsatish mumkin)",
+    "Адрес кондитера": "Qandolatchi manzili",
+    "Заказчики": "Buyurtmachilar",
+    "Поиск по телефону или имени": "Telefon yoki ism bo‘yicha qidirish",
+    "Имя": "Ism",
+    "Оплачено": "To‘langan",
+    "Заказчиков нет.": "Buyurtmachilar yo‘q.",
+    "Адрес кухни": "Oshxona manzili"
   };
 
   const CYR = /[А-Яа-яЁё]/;
@@ -496,6 +529,9 @@
     [/^✨ Результаты ИИ‑подбора \((\d+)\)\. Нажмите «Сбросить», чтобы вернуться к каталогу\.$/,
       (m) => `✨ SI tanlovi natijalari (${m[1]}). Katalogga qaytish uchun «Tozalash» tugmasini bosing.`],
     [/^([\d.,]+) · (\d+) отз\.$/, (m) => `${m[1]} · ${m[2]} ta sharh`],
+    [/^~([\d.,]+) км от вас$/, (m) => `~${m[1]} km uzoqlikda`],
+    [/^🚚 Доставка: (.*)$/s, (m) => '🚚 Yetkazib berish: ' + m[1]],
+    [/^🏃 Самовывоз: (.*)$/s, (m) => '🏃 O‘zi olib ketish: ' + m[1]],
     [/^Выполнено заказов: (\d+)$/, (m) => `Bajarilgan buyurtmalar: ${m[1]}`],
     [/^(.+) — Shokutaku 食卓$/, (m) => { const t = tr(m[1]); return t == null ? null : `${t} — Shokutaku 食卓`; }],
   ];
@@ -529,7 +565,7 @@
     return s.match(/^\s*/)[0] + r + s.match(/\s*$/)[0];
   }
 
-  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT']);
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'YMAPS']); // YMAPS — внутренности Яндекс Карты
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const done = new WeakMap(); // узел → текст, который мы туда записали
 
@@ -557,7 +593,7 @@
   }
 
   function attrs(el) {
-    if (el.closest('script,style,noscript,[translate="no"]')) return;
+    if (el.closest('script,style,noscript,ymaps,[translate="no"]')) return;
     for (const a of ATTRS) {
       const v = el.getAttribute(a);
       if (v && CYR.test(v)) { const r = t(v); if (r !== v) el.setAttribute(a, r); }

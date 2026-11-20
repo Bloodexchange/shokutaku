@@ -33,7 +33,7 @@
   const show = () => root.classList.remove('i18n-wait');
   setTimeout(show, 3000);
   const s = document.createElement('script');
-  s.src = '/js/i18n-uz.js?v=1';
+  s.src = '/js/i18n-uz.js?v=2';
   s.async = false;
   s.onerror = show;
   document.head.appendChild(s);

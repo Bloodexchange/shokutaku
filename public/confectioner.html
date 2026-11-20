@@ -19,6 +19,7 @@
 <script src="/js/i18n.js"></script>
 <script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/ymap.js"></script>
 </head>
 <body>
 <header class="site-header"></header>
@@ -71,6 +72,12 @@
               <input id="experience_years" name="experience_years" type="number" min="0" max="80" inputmode="numeric" required></div>
             <div class="field"><label for="workplace">Где работали или работаете сейчас</label>
               <input id="workplace" name="workplace" type="text" maxlength="300" placeholder="Кондитерская, ресторан, дома на заказ…"></div>
+          </div>
+          <div class="field"><label for="address">Адрес кухни для самовывоза <span class="muted">(можно указать позже в кабинете)</span></label>
+            <p class="small muted" style="margin:0 0 8px">Отметьте точку на карте. Заказчик увидит адрес и маршрут только после оплаты заказа.</p>
+            <div class="map-box" id="reg-map"><span class="spinner"></span></div>
+            <input id="address" name="address" type="text" maxlength="300" placeholder="Улица, дом" style="margin-top:10px">
+            <input type="hidden" name="lat" id="lat"><input type="hidden" name="lon" id="lon">
           </div>
           <div class="field"><label>Направления <span class="muted">(выберите всё, что подходит)</span></label>
             <div class="cat-grid" id="cats"></div></div>
@@ -145,8 +152,15 @@
     document.getElementById('parent').classList.toggle('hidden', !(a !== null && a >= 15 && a < 18));
   });
 
+  let regMap = null;
+  document.getElementById('address').addEventListener('input', () => { document.getElementById('lat').value = ''; document.getElementById('lon').value = ''; });
   function render() {
     steps.forEach((s, i) => s.classList.toggle('hidden', i !== step));
+    if (step === 1 && !regMap) {
+      regMap = ShkMap.picker(document.getElementById('reg-map'), { onChange: (p) => {
+        document.getElementById('lat').value = p.lat; document.getElementById('lon').value = p.lon; document.getElementById('address').value = p.address;
+      } });
+    }
     bars.forEach((b, i) => b.classList.toggle('on', i <= step));
     btnBack.classList.toggle('hidden', step === 0);
     btnNext.classList.toggle('hidden', step === steps.length - 1);

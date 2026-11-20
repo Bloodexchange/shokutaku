@@ -20,6 +20,7 @@
 <script src="/js/i18n.js"></script>
 <script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/ymap.js"></script>
 </head>
 <body>
 <header class="site-header"></header>
@@ -57,6 +58,12 @@
       </div>
 
       <div class="card">
+        <div class="row"><h2 style="margin:0">Заказчики</h2><span class="spacer"></span>
+          <input id="c-q" type="search" placeholder="Поиск по телефону или имени" style="width:auto;min-width:220px"></div>
+        <div id="clients" style="margin-top:16px;overflow-x:auto"></div>
+      </div>
+
+      <div class="card">
         <div class="row"><h2 style="margin:0">Анкеты кондитеров</h2><span class="spacer"></span>
           <select id="filter" style="width:auto"><option value="pending">На проверке</option><option value="approved">Приняты</option><option value="rejected">Отклонены</option><option value="">Все</option></select></div>
         <div class="list" id="apps" style="margin-top:16px"></div>
@@ -73,7 +80,7 @@
   async function showPanel() {
     $('login').classList.add('hidden');
     $('panel').classList.remove('hidden');
-    await Promise.all([loadStats(), loadApps(), loadTg(), loadSettings(), loadOrders()]);
+    await Promise.all([loadStats(), loadApps(), loadTg(), loadSettings(), loadOrders(), loadClients()]);
   }
 
   async function loadStats() {
@@ -123,6 +130,17 @@
   });
 
   const OST = { new: 'Новая', accepted: 'Ждёт оплаты', declined: 'Отклонена', paid: 'Оплачен', done: 'Выполнен', cancelled: 'Отменена', refunded: 'Возврат' };
+  async function loadClients() {
+    const q = $('c-q').value.trim();
+    const { items } = await Shk.api('/api/admin/clients' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    $('clients').innerHTML = items.length ? `<table class="table small"><thead><tr><th>#</th><th>Имя</th><th>Телефон</th><th>Заявок</th><th>Оплачено</th><th>Регистрация</th></tr></thead><tbody>
+      ${items.map((u) => `<tr><td>${u.id}</td><td>${esc(u.name || '—')}</td><td><a href="tel:${esc(u.phone)}">${esc(u.phone)}</a></td>
+        <td>${u.orders}</td><td>${u.paid_orders ? `<b>${money(u.paid_sum)}</b> <span class="muted">(${u.paid_orders})</span>` : '—'}</td><td>${new Date(u.created_at).toLocaleDateString('ru-RU')}</td></tr>`).join('')}
+      </tbody></table>` : '<p class="muted">Заказчиков нет.</p>';
+  }
+  let cTimer;
+  $('c-q').addEventListener('input', () => { clearTimeout(cTimer); cTimer = setTimeout(loadClients, 300); });
+
   async function loadOrders() {
     const { items } = await Shk.api('/api/admin/orders?filter=' + $('o-filter').value);
     $('orders').innerHTML = items.length ? items.map((o) => {
@@ -141,6 +159,9 @@
           <dt>Заказчик</dt><dd>${esc(o.client_name)}, <a href="tel:${esc(o.client_phone)}">${esc(o.client_phone)}</a></dd>
           <dt>Кондитер</dt><dd>${esc(o.confectioner_name)}, <a href="tel:${esc(o.confectioner_phone)}">${esc(o.confectioner_phone)}</a></dd>
           <dt>Карта кондитера</dt><dd>${o.payout_card ? `${fmtCard(o.payout_card)}${o.payout_holder ? ' · ' + esc(o.payout_holder) : ''}` : '<span class="muted">не указана</span>'}</dd>
+          <dt>Получение</dt><dd>${o.delivery_type === 'delivery'
+            ? `🚚 Доставка: ${esc(o.delivery_address || '—')}${o.delivery_details ? ', ' + esc(o.delivery_details) : ''}${ShkMap.routeLinks({ lat: o.delivery_lat, lon: o.delivery_lon, address: o.delivery_address })}`
+            : `🏃 Самовывоз${o.confectioner_address || o.confectioner_lat != null ? `: ${esc(o.confectioner_address || '')}${ShkMap.routeLinks({ lat: o.confectioner_lat, lon: o.confectioner_lon, address: o.confectioner_address })}` : ''}`}</dd>
           <dt>Чек</dt><dd>${o.receipt_file ? `<a href="/api/admin/files/${o.receipt_file}" target="_blank">Открыть чек</a>` : '—'}</dd>
           ${o.dispute_text ? `<dt>Жалоба</dt><dd>${esc(o.dispute_text)}</dd>` : ''}
           <dt>Выплата</dt><dd>${{ none: '—', due: 'к выплате', hold: 'приостановлена (жалоба)', paid: 'выплачено' }[o.payout_status] || o.payout_status}</dd>
@@ -173,6 +194,7 @@
           <dt>Возраст</dt><dd>${c.age} ${c.age < 18 ? `<span class="badge gold">несовершеннолетний</span>` : ''}</dd>
           ${c.age < 18 ? `<dt>Родитель</dt><dd>${esc(c.parent_name)}, <a href="tel:${esc(c.parent_phone)}">${esc(c.parent_phone)}</a></dd>` : ''}
           <dt>Город</dt><dd>${esc(c.city || '—')}</dd>
+          <dt>Адрес кухни</dt><dd>${esc(c.address || '—')}${ShkMap.routeLinks({ lat: c.lat, lon: c.lon, address: c.address })}</dd>
           <dt>Стаж</dt><dd>${Shk.years(c.experience_years)}</dd>
           <dt>Где работал(а)</dt><dd>${esc(c.workplace || '—')}</dd>
           <dt>Направления</dt><dd>${c.specialty_labels.map((s) => `<span>${esc(s)}</span>`).join(', ')}</dd>

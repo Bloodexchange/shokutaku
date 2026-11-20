@@ -19,6 +19,7 @@
 <script src="/js/i18n.js"></script>
 <script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/ymap.js"></script>
 </head>
 <body>
 <header class="site-header"></header>
@@ -73,6 +74,26 @@
     }
     const money2 = o.price ? `<dt>Цена</dt><dd><b>${money(o.price)}</b>${!isClient ? ` <span class="muted small">(вам ${money(o.payout_amount)}, комиссия ${Number(o.commission_percent || 0)}%)</span>` : ''}</dd>` : '';
     const payout = !isClient && PAYOUT[o.payout_status] ? `<dt>Выплата</dt><dd>${PAYOUT[o.payout_status]}</dd>` : '';
+    const paidOk = ['paid', 'done'].includes(o.status);
+    let place = '', where = '';
+    const mapBtn = (p, title) => (p.lat != null ? `<button type="button" class="btn btn-ghost btn-sm" data-map="${o.id}" data-lat="${p.lat}" data-lon="${p.lon}" data-title="${esc(title)}">🗺 Показать на карте</button>` : '');
+    if (o.delivery_type === 'delivery') {
+      if (o.delivery_address) {
+        place = `${esc(o.delivery_address)}${o.delivery_details ? `<br><span class="muted">${esc(o.delivery_details)}</span>` : ''}`;
+        const p = { lat: o.delivery_lat, lon: o.delivery_lon, address: o.delivery_address };
+        where = `<div class="route-links">${mapBtn(p, o.delivery_address)}</div>${isClient ? '' : ShkMap.routeLinks(p)}`;
+      } else {
+        place = `<span class="muted">Адрес доставки откроется после оплаты${o.distance_km != null ? ` · ~${o.distance_km} км от вас` : ''}</span>`;
+      }
+    } else if (isClient) {
+      if (o.pickup_address) {
+        const p = o.pickup_address;
+        place = esc(p.address || `${p.lat}, ${p.lon}`);
+        where = `<div class="route-links">${mapBtn(p, p.address || o.confectioner_name)}</div>${ShkMap.routeLinks(p)}`;
+      } else place = `<span class="muted">${paidOk ? 'Кондитер ещё не указал адрес. Уточните его по телефону.' : 'Адрес кондитера откроется после оплаты'}</span>`;
+    }
+    const getting = `<dt>Получение</dt><dd>${o.delivery_type === 'delivery' ? '🚚 Доставка' : (isClient ? '🏃 Самовывоз' : '🏃 Самовывоз: заказчик заберёт сам')}</dd>
+      ${place ? `<dt>${o.delivery_type === 'delivery' ? 'Адрес доставки' : 'Адрес кондитера'}</dt><dd>${place}</dd>` : ''}`;
     return `<div class="card order" data-order="${o.id}">
       <div class="row"><h3 style="margin:0">#${o.id} · ${esc(o.dish)}</h3><span class="spacer"></span><span class="badge ${cls}">${label}</span></div>
       <dl class="kv small">
@@ -83,7 +104,9 @@
         <dt>Бюджет</dt><dd>${esc(o.budget || '—')}</dd>
         <dt>Комментарий</dt><dd>${esc(o.comment || '—')}</dd>
         <dt>Создана</dt><dd>${date(o.created_at)}</dd>
+        ${getting}
       </dl>
+      ${where}<div class="map-slot"></div>
       ${extra}
       ${actions ? `<div class="row">${actions}</div>` : ''}
       <div class="slot"></div>
@@ -143,11 +166,26 @@
           `<label><input type="checkbox" value="${c.key}" ${profile.specialties.includes(c.key) ? 'checked' : ''}> ${esc(c.label)}</label>`).join('')}</div></div>
         <div class="field"><label for="p-dishes">Что вы готовите лучше всего</label><textarea id="p-dishes" maxlength="600">${esc(profile.signature_dishes || '')}</textarea></div>
         <div class="field"><label for="p-about">О себе</label><textarea id="p-about" maxlength="1000">${esc(profile.about || '')}</textarea></div>
+        <div class="field"><label for="p-addr">Адрес кухни для самовывоза</label>
+          <p class="small muted" style="margin:0 0 8px">Отметьте точку на карте. Заказчик увидит адрес и маршрут только после оплаты заказа.</p>
+          <div class="map-box" id="p-map"><span class="spinner"></span></div>
+          <div class="row" style="flex-wrap:nowrap;margin-top:10px"><input id="p-addr" type="text" maxlength="300" placeholder="Улица, дом" value="${esc(profile.address || '')}" style="flex:1">
+            <button type="button" class="btn btn-ghost btn-sm" id="p-find">Найти</button></div>
+        </div>
         <p class="small muted">Сертификат: ${profile.certificate ? 'загружен' : 'не загружен'}.</p>
         <div class="alert hidden" id="p-err"></div>
         <button class="btn" type="submit">Сохранить анкету</button>
       </form>
       <div style="margin-top:24px">${pwdForm}</div>`;
+    const pgeo = { lat: profile.lat, lon: profile.lon };
+    const paddr = document.getElementById('p-addr');
+    const ppick = ShkMap.picker(document.getElementById('p-map'), { lat: profile.lat, lon: profile.lon,
+      onChange: (p) => { pgeo.lat = p.lat; pgeo.lon = p.lon; paddr.value = p.address; } });
+    paddr.addEventListener('input', () => { pgeo.lat = null; pgeo.lon = null; });
+    document.getElementById('p-find').addEventListener('click', async () => {
+      const m = await ppick;
+      if (m && paddr.value.trim().length > 3 && !(await m.find(paddr.value.trim()).catch(() => false))) Shk.toast('Адрес не найден, отметьте точку на карте');
+    });
     const cardInput = document.getElementById('po-card');
     cardInput.addEventListener('input', () => { cardInput.value = cardInput.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 '); });
     document.getElementById('payout').addEventListener('submit', async (e) => {
@@ -168,6 +206,7 @@
           city: document.getElementById('p-city').value, workplace: document.getElementById('p-work').value,
           specialties: [...e.target.querySelectorAll('.cat-grid input:checked')].map((x) => x.value),
           signature_dishes: document.getElementById('p-dishes').value, about: document.getElementById('p-about').value,
+          address: paddr.value, lat: pgeo.lat, lon: pgeo.lon,
         } });
         Shk.toast('Анкета сохранена');
       } catch (ex) { Shk.showError(err, ex.message); }
@@ -181,6 +220,15 @@
       e.target.reset();
       Shk.toast('Пароль изменён');
     } catch (ex) { Shk.toast(ex.message); }
+  });
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-map]');
+    if (!b) return;
+    const slot = b.closest('.order').querySelector('.map-slot');
+    if (slot.firstChild) { slot.innerHTML = ''; return; }
+    slot.innerHTML = '<div class="map-box sm" style="margin-top:10px"><span class="spinner"></span></div>';
+    ShkMap.view(slot.firstChild, { lat: b.dataset.lat, lon: b.dataset.lon, title: b.dataset.title });
   });
 
   async function openPayment(id, slot) {

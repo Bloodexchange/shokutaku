@@ -126,6 +126,9 @@ function paymentText(o, headline) {
     `<b>Блюдо:</b> ${esc(o.dish)}`,
     `<b>Заказчик:</b> ${esc(o.client_name)}, ${esc(o.client_phone)}`,
     `<b>Кондитер:</b> ${esc(o.confectioner_name)}`,
+    o.delivery_type === 'delivery'
+      ? `<b>Доставка:</b> ${esc(o.delivery_address || '—')}${o.delivery_details ? ', ' + esc(o.delivery_details) : ''}`
+      : '<b>Получение:</b> самовывоз',
     `<b>Комиссия:</b> ${Number(o.commission_percent || 0)}% · кондитеру ${orders.fmt(orders.payoutAmount(o))} сум`,
   ].join('\n');
 }
@@ -160,6 +163,7 @@ const HELP = [
   '',
   '/pending — анкеты, ожидающие проверки',
   '/payments — оплаты, ожидающие подтверждения',
+  '/clients — последние заказчики с телефонами',
   '/stats — статистика сайта',
   '/logout — выйти из бота',
 ].join('\n');
@@ -224,6 +228,16 @@ async function handleUpdate(update) {
     if (!rows.length) return call('sendMessage', { chat_id: chatId, text: 'Оплат на проверке нет 👌' });
     for (const r of rows) await notifyPaymentReview(r.id);
     return;
+  }
+
+  if (cmd === '/clients') {
+    const { rows } = await db.query(
+      `SELECT u.id, u.name, u.phone, u.created_at, count(o.id)::int AS orders
+       FROM users u LEFT JOIN orders o ON o.client_id=u.id
+       WHERE u.role='client' GROUP BY u.id ORDER BY u.created_at DESC LIMIT 15`);
+    if (!rows.length) return call('sendMessage', { chat_id: chatId, text: 'Заказчиков пока нет.' });
+    const lines = rows.map((u) => `#${u.id} ${esc(u.name || '—')} · ${esc(u.phone)} · заявок: ${u.orders} · ${new Date(u.created_at).toLocaleDateString('ru-RU')}`);
+    return call('sendMessage', { chat_id: chatId, parse_mode: 'HTML', text: `<b>👤 Последние заказчики</b>\n${lines.join('\n')}` });
   }
 
   if (cmd === '/stats') {

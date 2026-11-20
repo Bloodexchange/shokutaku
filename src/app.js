@@ -74,12 +74,29 @@ const CONF_SELECT = `
          c.specialties, c.signature_dishes AS dishes, c.workplace, c.about,
          (c.certificate_file IS NOT NULL) AS certificate, c.created_at,
          COALESCE(r.avg, 0)::float AS rating, COALESCE(r.cnt, 0)::int AS reviews,
-         COALESCE(o.done, 0)::int AS orders_done
+         COALESCE(o.done, 0)::int AS orders_done,
+         (c.address IS NOT NULL OR c.lat IS NOT NULL) AS has_address
   FROM confectioners c
   LEFT JOIN (SELECT confectioner_id, avg(rating) AS avg, count(*) AS cnt FROM reviews GROUP BY confectioner_id) r
          ON r.confectioner_id = c.user_id
   LEFT JOIN (SELECT confectioner_id, count(*) AS done FROM orders WHERE status='done' GROUP BY confectioner_id) o
          ON o.confectioner_id = c.user_id`;
+
+/** Координаты точки на карте из запроса (или null). */
+function point(lat, lon) {
+  const a = Number(lat), b = Number(lon);
+  if (lat === '' || lat == null || lon === '' || lon == null) return null;
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) > 90 || Math.abs(b) > 180) return null;
+  return [Math.round(a * 1e6) / 1e6, Math.round(b * 1e6) / 1e6];
+}
+
+/** Расстояние по прямой, км. */
+function distanceKm(lat1, lon1, lat2, lon2) {
+  if ([lat1, lon1, lat2, lon2].some((v) => v == null)) return null;
+  const r = Math.PI / 180;
+  const h = Math.sin(((lat2 - lat1) * r) / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return Math.round(12742 * Math.asin(Math.sqrt(h)) * 10) / 10;
+}
 
 function shapeConf(row) {
   return {
@@ -105,12 +122,16 @@ app.post('/api/telegram/webhook', wrap(async (req, res) => {
 
 app.use('/api', auth.attach);
 
+// Ключ JavaScript API Яндекс Карт (публичный, виден в браузере). Можно заменить переменной YANDEX_MAPS_KEY.
+const DEFAULT_YMAPS_KEY = '5771415d-001f-4699-b102-0fb2f6af965a';
+
 app.get('/api/meta', wrap(async (_req, res) => {
   const s = await db.getSettings();
   res.json({
     categories: CATEGORIES.map(([key, label]) => ({ key, label })),
     ai: gemini.enabled(),
     commission_percent: Number(s.commission_percent) || 0,
+    yandex_maps_key: process.env.YANDEX_MAPS_KEY || DEFAULT_YMAPS_KEY,
   });
 }));
 
@@ -135,6 +156,7 @@ app.post('/api/auth/register-client', wrap(async (req, res) => {
   );
   if (!r.rows[0]) throw new HttpError(409, 'Этот номер уже зарегистрирован. Войдите в аккаунт.');
   auth.login(res, r.rows[0]);
+  tg.notifyAdmins(`👤 <b>Новый заказчик #${r.rows[0].id}</b>\nИмя: ${tg.esc(name || '—')}\nТелефон: ${tg.esc(phone)}`).catch(() => {});
   res.status(201).json({ user: publicUser(r.rows[0]) });
 }));
 
@@ -192,10 +214,11 @@ app.post('/api/auth/register-confectioner', upload.single('certificate'), wrap(a
     }
     await client.query(
       `INSERT INTO confectioners(user_id, full_name, birth_date, parent_name, parent_phone, city, experience_years,
-         workplace, specialties, signature_dishes, about, certificate_file, terms_accepted_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())`,
+         workplace, specialties, signature_dishes, about, certificate_file, terms_accepted_at, address, lat, lon)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now(), $13, $14, $15)`,
       [user.id, fullName, birth, parentName, parentPhone, normalizeCity(str(b.city, 60)) || null, exp,
-        str(b.workplace, 300) || null, specialties, dishes, str(b.about, 1000) || null, fileId]
+        str(b.workplace, 300) || null, specialties, dishes, str(b.about, 1000) || null, fileId,
+        str(b.address, 300) || null, ...(point(b.lat, b.lon) || [null, null])]
     );
     await client.query('COMMIT');
     auth.login(res, user);
@@ -336,14 +359,22 @@ app.post('/api/orders', auth.requireUser('client'), wrap(async (req, res) => {
   const date = str(req.body.event_date, 10);
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw bad('Неверная дата');
   if (date && new Date(date) < new Date(new Date().toDateString())) throw bad('Дата не может быть в прошлом');
+  const delivery = req.body.delivery_type === 'delivery' ? 'delivery' : 'pickup';
+  const dAddress = delivery === 'delivery' ? str(req.body.delivery_address, 300) : '';
+  const dPoint = delivery === 'delivery' ? point(req.body.delivery_lat, req.body.delivery_lon) : null;
+  const dDetails = delivery === 'delivery' ? str(req.body.delivery_details, 200) : '';
+  if (delivery === 'delivery' && dAddress.length < 5) throw bad('Укажите адрес доставки на карте или текстом');
   const open = await db.query("SELECT count(*)::int AS n FROM orders WHERE client_id=$1 AND status='new'", [req.user.id]);
   if (open.rows[0].n >= 10) throw bad('У вас слишком много необработанных заявок');
   const { rows } = await db.query(
-    `INSERT INTO orders(client_id, confectioner_id, dish, components, event_date, budget, comment)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [req.user.id, confId, dish, str(req.body.components, 500) || null, date || null, str(req.body.budget, 60) || null, str(req.body.comment, 1000) || null]
+    `INSERT INTO orders(client_id, confectioner_id, dish, components, event_date, budget, comment,
+       delivery_type, delivery_address, delivery_details, delivery_lat, delivery_lon)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    [req.user.id, confId, dish, str(req.body.components, 500) || null, date || null, str(req.body.budget, 60) || null, str(req.body.comment, 1000) || null,
+      delivery, dAddress || null, dDetails || null, ...(dPoint || [null, null])]
   );
-  tg.notifyAdmins(`🛎 <b>Новая заявка #${rows[0].id}</b>\n${tg.esc(dish)} → ${tg.esc(conf.rows[0].full_name)}\nЗаказчик: ${tg.esc(req.user.phone)}`)
+  const getting = delivery === 'delivery' ? `🚚 Доставка: ${tg.esc(dAddress)}${dDetails ? ', ' + tg.esc(dDetails) : ''}` : '🏃 Самовывоз';
+  tg.notifyAdmins(`🛎 <b>Новая заявка #${rows[0].id}</b>\n${tg.esc(dish)} → ${tg.esc(conf.rows[0].full_name)}\nЗаказчик: ${tg.esc(req.user.name || '—')}, ${tg.esc(req.user.phone)}\n${getting}`)
     .catch(() => {});
   res.status(201).json({ id: rows[0].id });
 }));
@@ -352,6 +383,7 @@ app.get('/api/orders', auth.requireUser(), wrap(async (req, res) => {
   const mine = req.user.role === 'client' ? 'o.client_id' : 'o.confectioner_id';
   const { rows } = await db.query(
     `SELECT o.*, c.full_name AS confectioner_name, cu.phone AS confectioner_phone,
+            c.address AS confectioner_address, c.lat AS confectioner_lat, c.lon AS confectioner_lon,
             COALESCE(u.name, 'Заказчик') AS client_name, u.phone AS client_phone,
             (r.id IS NOT NULL) AS reviewed
      FROM orders o
@@ -365,9 +397,16 @@ app.get('/api/orders', auth.requireUser(), wrap(async (req, res) => {
   // Контакты открываются только после оплаты заказа через сайт.
   const items = rows.map((o) => {
     const reveal = ['paid', 'done'].includes(o.status);
-    const { receipt_file, ...rest } = o;
+    const { receipt_file, confectioner_address, confectioner_lat, confectioner_lon, ...rest } = o;
+    const isDelivery = o.delivery_type === 'delivery';
+    // Точный адрес доставки и адрес кондитера тоже видны только после оплаты.
+    const hidden = { delivery_address: null, delivery_details: null, delivery_lat: null, delivery_lon: null };
     return {
       ...rest,
+      ...(reveal || req.user.role === 'client' ? {} : hidden),
+      distance_km: req.user.role === 'confectioner' && isDelivery ? distanceKm(confectioner_lat, confectioner_lon, o.delivery_lat, o.delivery_lon) : null,
+      pickup_address: reveal && !isDelivery && (confectioner_address || confectioner_lat != null)
+        ? { address: confectioner_address, lat: confectioner_lat, lon: confectioner_lon } : null,
       has_receipt: !!receipt_file,
       payout_amount: req.user.role === 'confectioner' ? orders.payoutAmount(o) : undefined,
       confectioner_phone: reveal ? o.confectioner_phone : null,
@@ -491,7 +530,7 @@ app.post('/api/orders/:id/review', auth.requireUser('client'), wrap(async (req, 
 
 app.get('/api/cabinet/profile', auth.requireUser('confectioner'), wrap(async (req, res) => {
   const { rows } = await db.query(
-    `SELECT full_name, birth_date::text, city, experience_years, workplace, specialties, signature_dishes, about,
+    `SELECT full_name, birth_date::text, city, experience_years, workplace, specialties, signature_dishes, about, address, lat, lon,
             (certificate_file IS NOT NULL) AS certificate, status, admin_note, created_at,
             CASE WHEN payout_card IS NOT NULL THEN '•••• ' || right(payout_card, 4) END AS payout_card_masked, payout_holder
      FROM confectioners WHERE user_id=$1`,
@@ -507,9 +546,11 @@ app.put('/api/cabinet/profile', auth.requireUser('confectioner'), wrap(async (re
   const specialties = [...new Set((Array.isArray(b.specialties) ? b.specialties : []).map(String))].filter((s) => CATEGORY_LABELS[s]);
   if (!specialties.length) throw bad('Выберите хотя бы одно направление');
   await db.query(
-    `UPDATE confectioners SET city=$2, experience_years=$3, workplace=$4, specialties=$5, signature_dishes=$6, about=$7, updated_at=now()
+    `UPDATE confectioners SET city=$2, experience_years=$3, workplace=$4, specialties=$5, signature_dishes=$6, about=$7,
+       address=$8, lat=$9, lon=$10, updated_at=now()
      WHERE user_id=$1`,
-    [req.user.id, normalizeCity(str(b.city, 60)) || null, exp, str(b.workplace, 300) || null, specialties, str(b.signature_dishes, 600), str(b.about, 1000) || null]
+    [req.user.id, normalizeCity(str(b.city, 60)) || null, exp, str(b.workplace, 300) || null, specialties, str(b.signature_dishes, 600), str(b.about, 1000) || null,
+      str(b.address, 300) || null, ...(point(b.lat, b.lon) || [null, null])]
   );
   tg.notifyAdmins(`✏️ Кондитер #${req.user.id} обновил анкету. Посмотреть: /pending или в админ‑панели.`).catch(() => {});
   res.json({ ok: true });
@@ -590,6 +631,22 @@ app.put('/api/admin/settings', auth.requireAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get('/api/admin/clients', auth.requireAdmin, wrap(async (req, res) => {
+  const q = str(req.query.q, 60);
+  const params = [];
+  let where = "u.role='client'";
+  if (q) { params.push(`%${q}%`); where += ` AND (u.phone ILIKE $1 OR u.name ILIKE $1)`; }
+  const { rows } = await db.query(
+    `SELECT u.id, u.name, u.phone, u.created_at,
+            count(o.id)::int AS orders,
+            count(o.id) FILTER (WHERE o.status IN ('paid','done'))::int AS paid_orders,
+            COALESCE(sum(o.price) FILTER (WHERE o.status IN ('paid','done')), 0)::bigint AS paid_sum,
+            max(o.created_at) AS last_order_at
+     FROM users u LEFT JOIN orders o ON o.client_id=u.id
+     WHERE ${where} GROUP BY u.id ORDER BY u.created_at DESC LIMIT 300`, params);
+  res.json({ items: rows });
+}));
+
 app.get('/api/admin/orders', auth.requireAdmin, wrap(async (req, res) => {
   const filters = {
     review: "o.payment_status='review'",
@@ -601,6 +658,7 @@ app.get('/api/admin/orders', auth.requireAdmin, wrap(async (req, res) => {
   const where = filters[req.query.filter] || filters.review;
   const { rows } = await db.query(
     `SELECT o.*, c.full_name AS confectioner_name, c.payout_card, c.payout_holder, cu.phone AS confectioner_phone,
+            c.address AS confectioner_address, c.lat AS confectioner_lat, c.lon AS confectioner_lon,
             COALESCE(u.name, 'Заказчик') AS client_name, u.phone AS client_phone
      FROM orders o
      JOIN confectioners c ON c.user_id=o.confectioner_id

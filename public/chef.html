@@ -19,6 +19,7 @@
 <script src="/js/i18n.js"></script>
 <script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/ymap.js"></script>
 </head>
 <body>
 <header class="site-header"></header>
@@ -93,11 +94,45 @@
         <div class="field"><label for="o-date">Дата</label><input id="o-date" type="date" min="${minDate}"></div>
         <div class="field"><label for="o-budget">Бюджет</label><input id="o-budget" type="text" maxlength="60" placeholder="350 000 сум"></div>
       </div>
-      <div class="field"><label for="o-comment">Комментарий</label><textarea id="o-comment" maxlength="1000" placeholder="Надпись, оформление, доставка"></textarea></div>
+      <div class="field"><label>Получение заказа</label>
+        <div class="seg">
+          <label><input type="radio" name="o-get" value="pickup" checked> <span>🏃 Самовывоз</span></label>
+          <label><input type="radio" name="o-get" value="delivery"> <span>🚚 Доставка</span></label>
+        </div>
+      </div>
+      <p class="small muted" id="o-pickup-note">${c.has_address ? 'Адрес кондитера и маршрут откроются в кабинете после оплаты.' : 'Кондитер сообщит адрес после оплаты.'}</p>
+      <div id="o-delivery" class="hidden">
+        <p class="small muted" style="margin-top:0">Отметьте точку доставки на карте: нажмите на карту, найдите адрес через поиск или определите своё местоположение.</p>
+        <div class="map-box" id="o-map"><span class="spinner"></span></div>
+        <div class="field" style="margin-top:12px"><label for="o-addr">Адрес доставки</label>
+          <div class="row" style="flex-wrap:nowrap"><input id="o-addr" type="text" maxlength="300" placeholder="Улица, дом" style="flex:1">
+          <button type="button" class="btn btn-ghost btn-sm" id="o-find">Найти</button></div></div>
+        <div class="field"><label for="o-addr2">Подъезд, этаж, квартира, ориентир</label><input id="o-addr2" type="text" maxlength="200"></div>
+      </div>
+      <div class="field"><label for="o-comment">Комментарий</label><textarea id="o-comment" maxlength="1000" placeholder="Надпись, оформление, пожелания"></textarea></div>
       <div class="alert hidden" id="o-err"></div>
       <button class="btn btn-gold btn-block" type="submit">Отправить заявку</button>
       <p class="small muted">Кондитер назовёт цену, вы оплатите заказ через сайт, и после подтверждения оплаты увидите его телефон в кабинете.</p>
     </form>`;
+  const geo = { lat: null, lon: null };
+  let pick = null;
+  const addr = document.getElementById('o-addr');
+  const getting = () => document.querySelector('input[name=o-get]:checked').value;
+  document.querySelectorAll('input[name=o-get]').forEach((r) => r.addEventListener('change', async () => {
+    const del = getting() === 'delivery';
+    document.getElementById('o-delivery').classList.toggle('hidden', !del);
+    document.getElementById('o-pickup-note').classList.toggle('hidden', del);
+    if (del && !pick) {
+      pick = ShkMap.picker(document.getElementById('o-map'), {
+        onChange: (p) => { geo.lat = p.lat; geo.lon = p.lon; addr.value = p.address; },
+      });
+    }
+  }));
+  addr.addEventListener('input', () => { geo.lat = null; geo.lon = null; });
+  document.getElementById('o-find').addEventListener('click', async () => {
+    const m = await pick;
+    if (m && addr.value.trim().length > 3 && !(await m.find(addr.value.trim()).catch(() => false))) Shk.toast('Адрес не найден, отметьте точку на карте');
+  });
   document.getElementById('order').addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = document.getElementById('o-err');
@@ -105,12 +140,17 @@
     const btn = e.target.querySelector('button');
     const dish = document.getElementById('o-dish').value.trim();
     if (dish.length < 2) return Shk.showError(err, 'Укажите, какое блюдо нужно');
+    const delivery = getting() === 'delivery';
+    if (delivery && addr.value.trim().length < 5) return Shk.showError(err, 'Укажите адрес доставки на карте или текстом');
     Shk.setBusy(btn, true, 'Отправляем…');
     try {
       await Shk.api('/api/orders', { method: 'POST', body: {
         confectioner_id: c.id, dish,
         components: document.getElementById('o-comp').value, event_date: document.getElementById('o-date').value,
         budget: document.getElementById('o-budget').value, comment: document.getElementById('o-comment').value,
+        delivery_type: delivery ? 'delivery' : 'pickup',
+        delivery_address: delivery ? addr.value : '', delivery_details: delivery ? document.getElementById('o-addr2').value : '',
+        delivery_lat: delivery ? geo.lat : null, delivery_lon: delivery ? geo.lon : null,
       } });
       box.innerHTML = `<h3>Заявка отправлена! 🎉</h3><p class="muted">Кондитер получит её в своём кабинете. Статус смотрите в разделе «Кабинет».</p><a class="btn btn-block" href="/cabinet">Мои заявки</a>`;
     } catch (ex) { Shk.showError(err, ex.message); Shk.setBusy(btn, false); }
