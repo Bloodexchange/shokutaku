@@ -17,6 +17,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Shippori+Mincho:wght@800&family=Unbounded:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
+<script src="/js/i18n.js"></script>
 <script src="/js/fx.js"></script>
 <script src="/js/common.js"></script>
 </head>
@@ -174,7 +175,7 @@
           <dt>Город</dt><dd>${esc(c.city || '—')}</dd>
           <dt>Стаж</dt><dd>${Shk.years(c.experience_years)}</dd>
           <dt>Где работал(а)</dt><dd>${esc(c.workplace || '—')}</dd>
-          <dt>Направления</dt><dd>${esc(c.specialty_labels.join(', '))}</dd>
+          <dt>Направления</dt><dd>${c.specialty_labels.map((s) => `<span>${esc(s)}</span>`).join(', ')}</dd>
           <dt>Лучше всего</dt><dd>${esc(c.signature_dishes || '—')}</dd>
           <dt>О себе</dt><dd>${esc(c.about || '—')}</dd>
           <dt>Сертификат</dt><dd>${c.certificate_file ? `<a href="/api/admin/files/${c.certificate_file}" target="_blank">Открыть файл</a>` : 'нет'}</dd>

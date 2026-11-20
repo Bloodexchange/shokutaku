@@ -45,7 +45,10 @@ async function generateJson(prompt, { timeoutMs = 12000 } = {}) {
  * Подбор лучших кондитеров под запрос клиента.
  * confectioners: [{id, name, experience, specialties[], dishes, workplace, city, certificate, rating}]
  */
-async function matchConfectioners({ query, dish, components }, confectioners) {
+const LANG_NAME = { ru: 'на русском', uz: 'на узбекском языке (латиницей, официальная латинская графика, например «Bu qandolatchi…»)' };
+
+async function matchConfectioners({ query, dish, components, lang = 'ru' }, confectioners) {
+  const L = LANG_NAME[lang] || LANG_NAME.ru;
   const list = confectioners.map((c) => ({
     id: c.id,
     name: c.name,
@@ -73,10 +76,10 @@ ${JSON.stringify(list)}
 - Учитывай особые требования (без сахара, без глютена, морепродукты, свадебный, детский и т. п.).
 - Не выдумывай кондитеров: используй только id из списка.
 - Верни до 6 лучших, отсортированных по убыванию score (0–100). Слабые совпадения (score < 30) не включай.
-- reason — одно короткое предложение на русском, почему кондитер подходит.
+- reason — одно короткое предложение ${L}, почему кондитер подходит.
 
 Ответь строго JSON:
-{"summary": "краткий совет клиенту на русском (1–2 предложения)",
+{"summary": "краткий совет клиенту ${L} (1–2 предложения)",
  "detected": {"dish": "...", "categories": ["ключи из списка: ${Object.keys(CATEGORY_LABELS).join(', ')}"]},
  "matches": [{"id": 1, "score": 90, "reason": "..."}]}`;
   const { model, data } = await generateJson(prompt);
@@ -90,11 +93,12 @@ ${JSON.stringify(list)}
 }
 
 /** Разбор свободного запроса без списка кондитеров (когда каталог ещё пуст). */
-async function analyzeRequest(query) {
+async function analyzeRequest(query, lang = 'ru') {
+  const L = LANG_NAME[lang] || LANG_NAME.ru;
   const prompt = `Клиент кондитерского сервиса написал: ${JSON.stringify(query)}.
 Определи, какое блюдо он хочет и к каким категориям оно относится.
 Категории (ключи): ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `${k}=${v}`).join('; ')}.
-Ответь строго JSON: {"dish": "...", "categories": ["key"], "tips": "1–2 предложения на русском: что уточнить у кондитера при заказе"}`;
+Ответь строго JSON: {"dish": "...", "categories": ["key"], "tips": "1–2 предложения ${L}: что уточнить у кондитера при заказе"}`;
   const { data } = await generateJson(prompt);
   return data;
 }

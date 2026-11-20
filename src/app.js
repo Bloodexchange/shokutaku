@@ -8,7 +8,7 @@ const auth = require('./auth');
 const tg = require('./telegram');
 const gemini = require('./gemini');
 const orders = require('./orders');
-const { CATEGORIES, CATEGORY_LABELS } = require('./constants');
+const { CATEGORIES, CATEGORY_LABELS, normalizeCity } = require('./constants');
 
 const app = express();
 app.disable('x-powered-by');
@@ -194,7 +194,7 @@ app.post('/api/auth/register-confectioner', upload.single('certificate'), wrap(a
       `INSERT INTO confectioners(user_id, full_name, birth_date, parent_name, parent_phone, city, experience_years,
          workplace, specialties, signature_dishes, about, certificate_file, terms_accepted_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())`,
-      [user.id, fullName, birth, parentName, parentPhone, str(b.city, 60) || null, exp,
+      [user.id, fullName, birth, parentName, parentPhone, normalizeCity(str(b.city, 60)) || null, exp,
         str(b.workplace, 300) || null, specialties, dishes, str(b.about, 1000) || null, fileId]
     );
     await client.query('COMMIT');
@@ -257,7 +257,7 @@ app.get('/api/confectioners', wrap(async (req, res) => {
   const minExp = Number(req.query.minExp);
   if (minExp > 0) { params.push(minExp); where.push(`c.experience_years >= $${params.length}`); }
   if (req.query.cert === '1') where.push('c.certificate_file IS NOT NULL');
-  const city = str(req.query.city, 60);
+  const city = normalizeCity(str(req.query.city, 60));
   if (city) { params.push(city); where.push(`c.city ILIKE $${params.length}`); }
   const sorts = {
     rating: 'rating DESC, experience DESC',
@@ -291,6 +291,7 @@ app.post('/api/ai/match', wrap(async (req, res) => {
   const components = (Array.isArray(req.body.components) ? req.body.components : String(req.body.components || '').split(','))
     .map((s) => str(s, 60)).filter(Boolean).slice(0, 20);
   if (!query && !dish && !components.length) throw bad('Опишите, что вы хотите заказать');
+  const lang = (req.get('x-shk-lang') || req.body.lang) === 'uz' ? 'uz' : 'ru';
 
   const key = `ai:${req.ip}`;
   if (await auth.tooManyAttempts(key, 30)) throw new HttpError(429, 'Слишком много запросов к ИИ. Подождите немного.');
@@ -300,10 +301,10 @@ app.post('/api/ai/match', wrap(async (req, res) => {
   const all = rows.map(shapeConf);
   try {
     if (!all.length) {
-      const a = await gemini.analyzeRequest([query, dish, components.join(', ')].filter(Boolean).join('. '));
+      const a = await gemini.analyzeRequest([query, dish, components.join(', ')].filter(Boolean).join('. '), lang);
       return res.json({ summary: a.tips || '', detected: { dish: a.dish, categories: a.categories || [] }, matches: [], items: [] });
     }
-    const result = await gemini.matchConfectioners({ query, dish, components }, all);
+    const result = await gemini.matchConfectioners({ query, dish, components, lang }, all);
     const byId = new Map(all.map((c) => [c.id, c]));
     res.json({
       summary: result.summary,
@@ -508,7 +509,7 @@ app.put('/api/cabinet/profile', auth.requireUser('confectioner'), wrap(async (re
   await db.query(
     `UPDATE confectioners SET city=$2, experience_years=$3, workplace=$4, specialties=$5, signature_dishes=$6, about=$7, updated_at=now()
      WHERE user_id=$1`,
-    [req.user.id, str(b.city, 60) || null, exp, str(b.workplace, 300) || null, specialties, str(b.signature_dishes, 600), str(b.about, 1000) || null]
+    [req.user.id, normalizeCity(str(b.city, 60)) || null, exp, str(b.workplace, 300) || null, specialties, str(b.signature_dishes, 600), str(b.about, 1000) || null]
   );
   tg.notifyAdmins(`✏️ Кондитер #${req.user.id} обновил анкету. Посмотреть: /pending или в админ‑панели.`).catch(() => {});
   res.json({ ok: true });

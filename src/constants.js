@@ -23,4 +23,23 @@ const CATEGORIES = [
 ];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORIES);
 
-module.exports = { CATEGORIES, CATEGORY_LABELS };
+/** Города храним по‑русски: узбекские и латинские названия приводим к одному виду. */
+const CITIES = {
+  'Ташкент': ['toshkent', 'tashkent', 'тошкент'],
+  'Самарканд': ['samarqand', 'samarkand', 'самарқанд'],
+  'Бухара': ['buxoro', 'bukhara', 'бухоро'],
+  'Андижан': ['andijon', 'andijan', 'андижон'],
+  'Наманган': ['namangan'],
+  'Фергана': ['farg‘ona', "farg'ona", 'fargʻona', 'fargona', 'fergana', 'фарғона'],
+  'Нукус': ['nukus'],
+  'Карши': ['qarshi', 'karshi', 'қарши'],
+  'Навои': ['navoiy', 'navoi', 'навоий'],
+  'Джизак': ['jizzax', 'jizzakh', 'jizzak', 'жиззах'],
+  'Ургенч': ['urganch', 'urgench', 'урганч'],
+  'Термез': ['termiz', 'termez', 'термиз'],
+  'Гулистан': ['guliston', 'gulistan', 'гулистон'],
+};
+const CITY_ALIASES = Object.fromEntries(Object.entries(CITIES).flatMap(([ru, list]) => [ru.toLowerCase(), ...list].map((a) => [a, ru])));
+const normalizeCity = (city) => (city ? CITY_ALIASES[String(city).trim().toLowerCase()] || city : city);
+
+module.exports = { CATEGORIES, CATEGORY_LABELS, normalizeCity };

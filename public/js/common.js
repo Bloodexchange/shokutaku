@@ -1,7 +1,9 @@
 // Общие функции для всех страниц Shokutaku 食卓
 const Shk = (() => {
+  const lang = (window.ShkI18n && window.ShkI18n.lang) || 'ru';
+
   async function api(path, { method = 'GET', body, form } = {}) {
-    const opts = { method, headers: {}, credentials: 'same-origin' };
+    const opts = { method, headers: { 'X-Shk-Lang': lang }, credentials: 'same-origin' };
     if (form) opts.body = form;
     else if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
@@ -86,19 +88,34 @@ const Shk = (() => {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
+  /** Переключатель языка RU / UZ. */
+  function langSwitch() {
+    return `<div class="lang-switch" role="group" aria-label="Til / Язык" translate="no">
+      <button type="button" data-lang="ru" class="${lang === 'ru' ? 'on' : ''}" aria-pressed="${lang === 'ru'}" title="Русский">RU</button>
+      <button type="button" data-lang="uz" class="${lang === 'uz' ? 'on' : ''}" aria-pressed="${lang === 'uz'}" title="O‘zbekcha">UZ</button>
+    </div>`;
+  }
+  function bindLang(scope) {
+    scope.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.lang !== lang && window.ShkI18n) window.ShkI18n.set(b.dataset.lang);
+    }));
+  }
+
   async function renderHeader() {
     const header = document.querySelector('.site-header');
     if (!header) return;
     header.innerHTML = `
       <div class="container">
         <a class="brand" href="/" aria-label="Shokutaku 食卓 — на главную"><img src="/img/logo.svg" alt="" width="44" height="44"><b>SHOKUTAKU</b><span class="jp">食卓</span></a>
-        <button class="menu-toggle" aria-label="Меню">☰</button>
         <nav class="nav">
           <a href="/catalog">Кондитеры</a>
           <a href="/terms">Условия</a>
           <span class="auth-slot"></span>
         </nav>
+        ${langSwitch()}
+        <button class="menu-toggle" aria-label="Меню">☰</button>
       </div>`;
+    bindLang(header);
     const nav = header.querySelector('.nav');
     header.querySelector('.menu-toggle').addEventListener('click', () => nav.classList.toggle('open'));
     const { user } = await me();
@@ -122,7 +139,9 @@ const Shk = (() => {
       <span><b class="jp" style="color:var(--yellow)">食卓</b> Shokutaku © ${new Date().getFullYear()}</span>
       <span class="spacer"></span>
       <a href="/catalog">Кондитеры</a><a href="/confectioner">Стать кондитером</a><a href="/terms">Условия пользования</a>
+      ${langSwitch()}
     </div>`;
+    bindLang(f);
   }
 
   /** Карточка кондитера (или пустая заготовка, если item=null). */
@@ -152,5 +171,5 @@ const Shk = (() => {
 
   document.addEventListener('DOMContentLoaded', () => { renderHeader(); renderFooter(); });
 
-  return { api, me, esc, toast, initials, years, stars, phoneMask, setBusy, showError, confCard };
+  return { lang, api, me, esc, toast, initials, years, stars, phoneMask, setBusy, showError, confCard };
 })();
